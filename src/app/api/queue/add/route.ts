@@ -17,7 +17,6 @@ import {
   DISPLAY_DURATION_PREMIUM,
   DUPLICATE_COOLDOWN_MS,
   PRIORITY_LEVELS,
-  HELIUS_RPC_URL,
 } from '@/lib/constants';
 import { getAppBaseUrl } from '@/lib/app-url';
 
@@ -33,6 +32,22 @@ interface AddToQueueRequest {
   userId?: string | null;
 }
 
+const TX_LOOKUP_TIMEOUT_MS = 45_000;
+const TX_LOOKUP_INTERVAL_MS = 2_500;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function buildRpcUrl(): string {
+  const base = process.env.NEXT_PUBLIC_HELIUS_RPC_URL || 'https://mainnet.helius-rpc.com';
+  if (base.includes('api-key=')) return base;
+  const apiKey = process.env.HELIUS_API_KEY || process.env.NEXT_PUBLIC_HELIUS_API_KEY || '';
+  if (!apiKey) return base;
+  const separator = base.includes('?') ? '&' : '?';
+  return `${base}${separator}api-key=${apiKey}`;
+}
+
 // ============================================
 // PAYMENT VERIFICATION
 // ============================================
@@ -42,7 +57,7 @@ async function verifyPayment(
   expectedPayer: string
 ): Promise<{ verified: boolean; amount: number; error?: string }> {
   try {
-    const rpcUrl = HELIUS_RPC_URL || 'https://api.devnet.solana.com';
+    const rpcUrl = buildRpcUrl();
     console.log('[Payment] Verifying on RPC:', rpcUrl);
     console.log('[Payment] Signature:', signature);
     console.log('[Payment] Expected payer:', expectedPayer);
@@ -50,18 +65,26 @@ async function verifyPayment(
     
     const connection = new Connection(rpcUrl);
 
-    // Wait a moment for transaction to be indexed
-    await new Promise(resolve => setTimeout(resolve, 2000));
-
-    // Get transaction details
-    const tx = await connection.getTransaction(signature, {
-      commitment: 'confirmed',
-      maxSupportedTransactionVersion: 0,
-    });
+    // Give RPC time to index the transaction. This avoids false negatives
+    // right after wallet confirms a payment.
+    const deadline = Date.now() + TX_LOOKUP_TIMEOUT_MS;
+    let tx: Awaited<ReturnType<typeof connection.getTransaction>> | null = null;
+    while (Date.now() < deadline) {
+      tx = await connection.getTransaction(signature, {
+        commitment: 'confirmed',
+        maxSupportedTransactionVersion: 0,
+      });
+      if (tx) break;
+      await sleep(TX_LOOKUP_INTERVAL_MS);
+    }
 
     if (!tx) {
       console.log('[Payment] Transaction not found');
-      return { verified: false, amount: 0, error: 'Transaction not found - please wait and try again' };
+      return {
+        verified: false,
+        amount: 0,
+        error: 'Transaction not indexed yet. Please wait 10-30s and retry with the SAME signature.',
+      };
     }
 
     if (tx.meta?.err) {

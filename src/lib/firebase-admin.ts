@@ -229,10 +229,12 @@ export async function isSignatureUsed(signature: string): Promise<boolean> {
   const snapshot = await db
     .collection(TRANSACTIONS_COLLECTION)
     .where('signature', '==', signature)
-    .limit(1)
+    .limit(10)
     .get();
 
-  return !snapshot.empty;
+  // Only block signatures that were successfully verified before.
+  // Failed verification attempts should be retryable with the same signature.
+  return snapshot.docs.some(doc => doc.data()?.verified === true);
 }
 
 /**
