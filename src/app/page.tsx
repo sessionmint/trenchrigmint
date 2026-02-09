@@ -13,7 +13,8 @@ import {
   PRIORITY_DUPLICATE,
   PRIORITY_PREMIUM,
   DISPLAY_DURATION_STANDARD,
-  DEFAULT_TOKEN_MINT
+  DEFAULT_TOKEN_MINT,
+  SOLANA_NETWORK_LABEL
 } from '@/lib/constants';
 import { withAppBasePath } from '@/lib/app-url';
 import { LoadingSessionOverlay } from '@/components/LoadingSessionOverlay';
@@ -258,7 +259,7 @@ export default function Dashboard() {
             <h1>SessionMint</h1>
             <span>
               <span className="dot" style={{ background: '#eab308' }} />
-              Devnet
+              {SOLANA_NETWORK_LABEL}
             </span>
           </div>
         </div>

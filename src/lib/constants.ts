@@ -63,6 +63,12 @@ export const HELIUS_CLIENT_API_KEY = process.env.NEXT_PUBLIC_HELIUS_API_KEY || "
 
 // PAYMENTS & WEBHOOKS: Both on MAINNET now
 export const PAYMENT_NETWORK = "mainnet-beta";
+export const SOLANA_CLUSTER = process.env.NEXT_PUBLIC_SOLANA_CLUSTER || PAYMENT_NETWORK;
+export const SOLANA_NETWORK_LABEL =
+  SOLANA_CLUSTER === 'mainnet-beta' ? 'Mainnet' :
+  SOLANA_CLUSTER === 'devnet' ? 'Devnet' :
+  SOLANA_CLUSTER === 'testnet' ? 'Testnet' :
+  SOLANA_CLUSTER;
 const HELIUS_RPC_BASE = process.env.NEXT_PUBLIC_HELIUS_RPC_URL || "https://mainnet.helius-rpc.com";
 const HELIUS_WS_BASE = process.env.NEXT_PUBLIC_HELIUS_WS_URL || "wss://mainnet.helius-rpc.com";
 
