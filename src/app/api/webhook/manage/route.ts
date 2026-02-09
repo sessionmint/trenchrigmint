@@ -245,13 +245,19 @@ export async function POST(request: NextRequest) {
     }
 
     const { tokenMint, webhookUrl } = await request.json();
+    let targetTokenMint: string = tokenMint;
 
-    if (!tokenMint) {
-      return NextResponse.json({ error: 'tokenMint is required' }, { status: 400 });
+    // If tokenMint is omitted, sync webhook to current active token.
+    if (!targetTokenMint) {
+      const db = getAdminDb();
+      const currentDoc = await db.doc('settings/currentToken').get();
+      const currentData = currentDoc.data();
+      targetTokenMint = currentData?.tokenMint || DEFAULT_TOKEN_MINT;
+      console.log('[Webhook] tokenMint not provided, using current token:', targetTokenMint);
     }
 
     // Validate token mint address format (basic check)
-    if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(tokenMint)) {
+    if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(targetTokenMint)) {
       return NextResponse.json({ error: 'Invalid token mint address format' }, { status: 400 });
     }
 
@@ -273,10 +279,10 @@ export async function POST(request: NextRequest) {
 
     if (webhook) {
       // Update the existing webhook to track the new token
-      console.log(`[Webhook] Updating webhook ${webhook.webhookID} to track ${tokenMint}`);
+      console.log(`[Webhook] Updating webhook ${webhook.webhookID} to track ${targetTokenMint}`);
 
       try {
-        webhook = await updateWebhook(webhook.webhookID, tokenMint);
+        webhook = await updateWebhook(webhook.webhookID, targetTokenMint);
       } catch (updateError) {
         console.error(`[Webhook] Update failed:`, updateError);
 
@@ -284,7 +290,7 @@ export async function POST(request: NextRequest) {
         console.log(`[Webhook] Attempting to recreate webhook...`);
         try {
           await deleteWebhook(webhook.webhookID);
-          webhook = await createWebhook(fullWebhookUrl, tokenMint);
+          webhook = await createWebhook(fullWebhookUrl, targetTokenMint);
           console.log(`[Webhook] Recreated webhook: ${webhook.webhookID}`);
         } catch (recreateError) {
           console.error(`[Webhook] Recreate failed:`, recreateError);
@@ -296,18 +302,18 @@ export async function POST(request: NextRequest) {
       }
     } else {
       // No webhooks exist - create the first one (initial setup)
-      console.log(`[Webhook] No webhooks found. Creating initial webhook for ${tokenMint}`);
-      webhook = await createWebhook(fullWebhookUrl, tokenMint);
+      console.log(`[Webhook] No webhooks found. Creating initial webhook for ${targetTokenMint}`);
+      webhook = await createWebhook(fullWebhookUrl, targetTokenMint);
       console.log(`[Webhook] Created initial webhook: ${webhook.webhookID}`);
     }
 
     // Save config to Firebase
-    await saveWebhookConfig(webhook.webhookID, tokenMint);
+    await saveWebhookConfig(webhook.webhookID, targetTokenMint);
 
     return NextResponse.json({
       success: true,
       webhookId: webhook.webhookID,
-      tokenMint,
+      tokenMint: targetTokenMint,
       webhookUrl: fullWebhookUrl,
       network: 'mainnet',
       message: existingWebhooks.length > 0 ? 'Webhook updated' : 'Initial webhook created',

@@ -302,6 +302,9 @@ export async function POST(request: NextRequest) {
     );
 
     // If queue was empty, trigger processing to make this token active immediately
+    let processedImmediately = false;
+    let processError: string | null = null;
+
     if (queueEmpty) {
       console.log('[Queue Add] Queue was empty, triggering immediate processing');
       console.log('[Queue Add] Token added with ID:', queueItemId);
@@ -320,8 +323,13 @@ export async function POST(request: NextRequest) {
         });
         const processResult = await processRes.json();
         console.log('[Queue Add] Process result:', processResult);
+        processedImmediately = !!(processRes.ok && processResult?.processed);
+        if (!processedImmediately) {
+          processError = processResult?.error || 'Queue processing did not complete immediately';
+        }
       } catch (e) {
         console.error('[Queue Add] Failed to trigger processing:', e);
+        processError = e instanceof Error ? e.message : 'Failed to trigger queue processing';
       }
     } else {
       console.log('[Queue Add] Queue not empty, token added to queue with ID:', queueItemId);
@@ -351,7 +359,8 @@ export async function POST(request: NextRequest) {
       priorityLevel,
       displayDuration,
       tier,
-      processedImmediately: queueEmpty
+      processedImmediately,
+      processError
     });
   } catch (error) {
     console.error('[Queue Add] Error:', error);

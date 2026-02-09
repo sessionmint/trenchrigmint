@@ -64,27 +64,23 @@ interface CurrentToken {
 // WEBHOOK UPDATE
 // ============================================
 
-async function updateHeliusWebhook(tokenMint: string, baseUrl: string): Promise<void> {
+async function updateHeliusWebhook(tokenMint: string, baseUrl: string): Promise<boolean> {
   if (!HELIUS_API_KEY) {
     console.log('[Process] Helius API key not configured, skipping webhook update');
-    return;
+    return false;
   }
 
   const adminKey = process.env.ADMIN_API_KEY;
   if (!adminKey) {
     console.error('[Process] Admin API key not configured, cannot update webhook');
-    return;
+    return false;
   }
 
-  // Check if webhook is already tracking this token (read from Firebase)
+  // Read last tracked token for diagnostics only.
   const db = getAdminDb();
   const settingsDoc = await db.doc('settings/webhook').get();
   const lastToken = settingsDoc.exists ? settingsDoc.data()?.trackedToken : null;
-  
-  if (lastToken === tokenMint) {
-    console.log('[Process] Webhook already tracking:', tokenMint);
-    return;
-  }
+  console.log('[Process] Webhook sync requested:', { from: lastToken, to: tokenMint });
 
   try {
     const response = await fetch(`${baseUrl}/api/webhook/manage`, {
@@ -99,6 +95,7 @@ async function updateHeliusWebhook(tokenMint: string, baseUrl: string): Promise<
     if (!response.ok) {
       const error = await response.text();
       console.error('[Process] Failed to update webhook:', error);
+      return false;
     } else {
       console.log('[Process] Webhook updated to track:', tokenMint);
       // Save the tracked token to Firebase
@@ -106,9 +103,11 @@ async function updateHeliusWebhook(tokenMint: string, baseUrl: string): Promise<
         trackedToken: tokenMint,
         updatedAt: FieldValue.serverTimestamp() 
       }, { merge: true });
+      return true;
     }
   } catch (error) {
     console.error('[Process] Error updating webhook:', error);
+    return false;
   }
 }
 
@@ -255,7 +254,7 @@ export async function POST(request: NextRequest) {
       await removeFromQueue(nextItem.id);
 
       // Update webhook to track new token
-      await updateHeliusWebhook(nextItem.tokenMint, baseUrl);
+      const webhookSynced = await updateHeliusWebhook(nextItem.tokenMint, baseUrl);
 
       // Note: Device session will be started by the status endpoint after 10-second cooldown
       // This is handled in /api/device/status to be serverless-compatible
@@ -270,18 +269,20 @@ export async function POST(request: NextRequest) {
         isPriority: nextItem.isPriority,
         priorityLevel: nextItem.priorityLevel,
         displayDuration: nextItem.displayDuration,
+        webhookSynced,
       });
     } else {
       // Queue empty - reset to default token
       await setCurrentToken(DEFAULT_TOKEN_MINT, null, null, false, 0, 0, null);
 
       // Update webhook to track default token
-      await updateHeliusWebhook(DEFAULT_TOKEN_MINT, baseUrl);
+      const webhookSynced = await updateHeliusWebhook(DEFAULT_TOKEN_MINT, baseUrl);
 
       return NextResponse.json({
         processed: true,
         action: 'reset_to_default',
         tokenMint: DEFAULT_TOKEN_MINT,
+        webhookSynced,
       });
     }
   } catch (error) {
