@@ -295,44 +295,55 @@ export async function POST(request: NextRequest) {
 }
 
 /**
- * GET - Get queue status
- * Requires admin API key
+ * GET
+ * - Default: process queue (used by Vercel Cron, which issues GET requests and sets `x-vercel-cron: 1`)
+ * - Status mode: `?status=1` returns queue status (requires admin API key)
  */
 export async function GET(request: NextRequest) {
   try {
-    // GET requires admin auth
-    if (!verifyAuth(request, true)) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const { searchParams } = new URL(request.url);
+    const wantsStatus = searchParams.get('status') === '1';
+
+    if (wantsStatus) {
+      // Status requires admin auth
+      if (!verifyAuth(request, true)) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      }
+
+      const db = getAdminDb();
+
+      // Get current token
+      const current = await getCurrentToken();
+
+      // Get queue length
+      const queueSnapshot = await db.collection('queue').get();
+      const queueLength = queueSnapshot.size;
+
+      // Get queue items
+      const queueItems = queueSnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
+
+      const now = Date.now();
+      const expiresAt = current?.expiresAt?.toMillis();
+
+      return NextResponse.json({
+        currentToken: current?.tokenMint || DEFAULT_TOKEN_MINT,
+        queueItemId: current?.queueItemId || null,
+        isPriority: current?.isPriority || false,
+        expiresAt: expiresAt ? new Date(expiresAt).toISOString() : null,
+        expiresIn: expiresAt ? Math.max(0, expiresAt - now) : null,
+        isExpired: expiresAt ? expiresAt < now : true,
+        queueLength,
+        queue: queueItems,
+      });
     }
 
-    const db = getAdminDb();
-
-    // Get current token
-    const current = await getCurrentToken();
-
-    // Get queue length
-    const queueSnapshot = await db.collection('queue').get();
-    const queueLength = queueSnapshot.size;
-
-    // Get queue items
-    const queueItems = queueSnapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data(),
-    }));
-
-    const now = Date.now();
-    const expiresAt = current?.expiresAt?.toMillis();
-
-    return NextResponse.json({
-      currentToken: current?.tokenMint || DEFAULT_TOKEN_MINT,
-      queueItemId: current?.queueItemId || null,
-      isPriority: current?.isPriority || false,
-      expiresAt: expiresAt ? new Date(expiresAt).toISOString() : null,
-      expiresIn: expiresAt ? Math.max(0, expiresAt - now) : null,
-      isExpired: expiresAt ? expiresAt < now : true,
-      queueLength,
-      queue: queueItems,
-    });
+    // Default behavior: process queue.
+    // Vercel Cron calls with x-vercel-cron: 1 and cannot attach Authorization headers.
+    // We accept either x-vercel-cron, CRON_SECRET, ADMIN_API_KEY, or no auth (same as POST behavior).
+    return await POST(request);
   } catch (error) {
     console.error('[Process] Error:', error);
     return NextResponse.json(
