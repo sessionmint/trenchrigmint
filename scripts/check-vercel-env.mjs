@@ -41,8 +41,6 @@ const required = [
   'NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET',
   'NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID',
   'NEXT_PUBLIC_FIREBASE_APP_ID',
-  'FIREBASE_PRIVATE_KEY',
-  'FIREBASE_CLIENT_EMAIL',
   'REDIS_URL',
   'ADMIN_API_KEY',
   'CRON_SECRET',
@@ -65,6 +63,13 @@ for (const key of required) {
   }
 }
 
+// Firebase Admin credentials: require either a JSON blob OR (private key + client email)
+const hasAdminJson = !!(process.env.FIREBASE_SERVICE_ACCOUNT_JSON || process.env.FIREBASE_ADMIN_SERVICE_ACCOUNT_JSON || process.env.FIREBASE_ADMIN_JSON);
+const hasAdminParts = !!(process.env.FIREBASE_PRIVATE_KEY && process.env.FIREBASE_CLIENT_EMAIL);
+if (!hasAdminJson && !hasAdminParts) {
+  missing.push('FIREBASE_SERVICE_ACCOUNT_JSON (or FIREBASE_PRIVATE_KEY + FIREBASE_CLIENT_EMAIL)');
+}
+
 for (const key of ['ADMIN_API_KEY', 'CRON_SECRET']) {
   const value = process.env[key] || '';
   if (!value) continue;
@@ -73,7 +78,7 @@ for (const key of ['ADMIN_API_KEY', 'CRON_SECRET']) {
   }
 }
 
-if ((process.env.FIREBASE_PRIVATE_KEY || '').includes('BEGIN PRIVATE KEY') === false) {
+if (!hasAdminJson && (process.env.FIREBASE_PRIVATE_KEY || '').includes('BEGIN PRIVATE KEY') === false) {
   warnings.push('FIREBASE_PRIVATE_KEY does not look like a private key.');
 }
 

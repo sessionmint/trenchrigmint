@@ -8,12 +8,46 @@ import { getFirestore, Firestore, Timestamp, FieldValue } from 'firebase-admin/f
 let adminApp: App;
 let adminDb: Firestore;
 
+type ServiceAccountJson = {
+  project_id?: string;
+  client_email?: string;
+  private_key?: string;
+};
+
+function parseServiceAccountFromEnv(): ServiceAccountJson | null {
+  const raw =
+    process.env.FIREBASE_SERVICE_ACCOUNT_JSON ||
+    process.env.FIREBASE_ADMIN_SERVICE_ACCOUNT_JSON ||
+    process.env.FIREBASE_ADMIN_JSON ||
+    '';
+
+  if (!raw) return null;
+
+  try {
+    // Vercel env values are strings; users often paste with escaped newlines.
+    // This preserves JSON validity while allowing "\\n" -> "\n" later for the PEM.
+    const parsed = JSON.parse(raw) as ServiceAccountJson;
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch (e) {
+    console.error('[Firebase Admin] FIREBASE_SERVICE_ACCOUNT_JSON is not valid JSON');
+    return null;
+  }
+}
+
 function getAdminApp(): App {
   if (getApps().length === 0) {
-    // Build service account from individual environment variables
-    const privateKey = process.env.FIREBASE_PRIVATE_KEY;
-    const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
-    const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
+    // Preferred: allow a full service account JSON blob to be provided via env.
+    // This avoids common Vercel issues with PEM formatting.
+    const serviceAccount = parseServiceAccountFromEnv();
+
+    const projectId =
+      serviceAccount?.project_id ||
+      process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ||
+      process.env.FIREBASE_PROJECT_ID ||
+      '';
+
+    const privateKey = serviceAccount?.private_key || process.env.FIREBASE_PRIVATE_KEY || '';
+    const clientEmail = serviceAccount?.client_email || process.env.FIREBASE_CLIENT_EMAIL || '';
 
     if (privateKey && clientEmail && projectId) {
       // Replace escaped newlines with actual newlines in private key
@@ -28,11 +62,9 @@ function getAdminApp(): App {
         projectId,
       });
     } else {
-      // Fallback: Initialize with project ID only (works in some Firebase environments like Cloud Functions)
+      // Fallback: Initialize with project ID only (may work in some Firebase environments)
       console.warn('[Firebase Admin] Missing credentials, initializing with project ID only');
-      adminApp = initializeApp({
-        projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-      });
+      adminApp = initializeApp({ projectId: projectId || process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID });
     }
   } else {
     adminApp = getApps()[0];
