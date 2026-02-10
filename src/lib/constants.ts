@@ -26,15 +26,12 @@ export const STANDARD_PRICE = 0.01;
 
 // Priority tiers (all skip to queue, ranked by price)
 export const PRIORITY_BASIC = 0.04;     // Basic priority - 10 min display
-export const PRIORITY_DUPLICATE = 0.1;   // Duplicate address override - 10 min display
+export const PRIORITY_DUPLICATE = 0.1;   // Mid-tier priority boost - 10 min display
 export const PRIORITY_PREMIUM = 0.42;     // Premium priority - 1 hour display
 
 // Display durations in milliseconds
 export const DISPLAY_DURATION_STANDARD = 10 * 60 * 1000;  // 10 minutes
 export const DISPLAY_DURATION_PREMIUM = 60 * 60 * 1000;   // 1 hour
-
-// Duplicate address cooldown (2 hours)
-export const DUPLICATE_COOLDOWN_MS = 2 * 60 * 60 * 1000;
 
 // Priority levels (higher = more priority)
 export const PRIORITY_LEVELS = {

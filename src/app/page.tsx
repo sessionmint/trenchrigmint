@@ -702,9 +702,6 @@ function PromoteForm({ mounted }: { mounted: boolean }) {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [selectedTier, setSelectedTier] = useState<number>(STANDARD_PRICE);
-  const [cooldownStatus, setCooldownStatus] = useState<{ inCooldown: boolean; message?: string } | null>(null);
-  const [checkingCooldown, setCheckingCooldown] = useState(false);
-  const debounceTimer = useRef<NodeJS.Timeout | null>(null);
 
   const { connection } = useConnection();
   const { publicKey, sendTransaction } = useWallet();
@@ -712,54 +709,11 @@ function PromoteForm({ mounted }: { mounted: boolean }) {
 
   const valid = (a: string) => { try { new PublicKey(a); return true; } catch { return false; } };
 
-  // Check cooldown when token changes (debounced)
-  useEffect(() => {
-    setCooldownStatus(null);
-    setError('');
-
-    if (!token.trim() || !valid(token.trim())) return;
-
-    if (debounceTimer.current) clearTimeout(debounceTimer.current);
-
-    debounceTimer.current = setTimeout(async () => {
-      setCheckingCooldown(true);
-      try {
-        const response = await fetch(withAppBasePath('/api/queue/check-cooldown'), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tokenMint: token.trim() }),
-        });
-
-        const data = await response.json();
-        setCooldownStatus(data);
-
-        // Auto-select Skip Cooldown tier if token is in cooldown
-        if (data.inCooldown) {
-          setSelectedTier(PRIORITY_DUPLICATE);
-        }
-      } catch (err) {
-        console.error('Cooldown check error:', err);
-      } finally {
-        setCheckingCooldown(false);
-      }
-    }, 800); // 0.8s debounce
-
-    return () => {
-      if (debounceTimer.current) clearTimeout(debounceTimer.current);
-    };
-  }, [token]);
-
   const pay = async (amount: number) => {
     setError(''); setSuccess('');
     if (!publicKey) return setError('Connect wallet');
     if (!token.trim()) return setError('Enter address');
     if (!valid(token)) return setError('Invalid address');
-
-    // Use cached cooldown status
-    if (amount < PRIORITY_DUPLICATE && cooldownStatus?.inCooldown) {
-      setError(cooldownStatus.message || 'Token in cooldown');
-      return;
-    }
 
     setLoading(true);
     try {
@@ -776,14 +730,13 @@ function PromoteForm({ mounted }: { mounted: boolean }) {
       const result = await addToQueue(token.trim(), publicKey.toString(), amount, sig);
 
       setToken('');
-      setCooldownStatus(null);
 
       // Show different message based on whether token is now active or queued
       if (result.processedImmediately) {
         if (amount === PRIORITY_PREMIUM) {
           setSuccess('Premium - Now showing!');
         } else if (amount === PRIORITY_DUPLICATE) {
-          setSuccess('Override - Now showing!');
+          setSuccess('Boost - Now showing!');
         } else if (amount === PRIORITY_BASIC) {
           setSuccess('Priority - Now showing!');
         } else {
@@ -793,7 +746,7 @@ function PromoteForm({ mounted }: { mounted: boolean }) {
         if (amount === PRIORITY_PREMIUM) {
           setSuccess('Premium added to queue!');
         } else if (amount === PRIORITY_DUPLICATE) {
-          setSuccess('Override added to queue!');
+          setSuccess('Boost added to queue!');
         } else if (amount === PRIORITY_BASIC) {
           setSuccess('Priority added to queue!');
         } else {
@@ -804,10 +757,8 @@ function PromoteForm({ mounted }: { mounted: boolean }) {
       setTimeout(() => setSuccess(''), 4000);
     } catch (e: unknown) {
       const errorMsg = e instanceof Error ? e.message : '';
-      
-      if (errorMsg.includes('recently queued') || errorMsg.includes('DUPLICATE_COOLDOWN')) {
-        setError(errorMsg);
-      } else if (errorMsg.includes('rejected')) {
+
+      if (errorMsg.includes('rejected')) {
         setError('Cancelled');
       } else {
         setError('Failed');
@@ -818,8 +769,7 @@ function PromoteForm({ mounted }: { mounted: boolean }) {
   };
 
   const isPayDisabled = () => {
-    if (loading || !publicKey || checkingCooldown) return true;
-    if (selectedTier < PRIORITY_DUPLICATE && cooldownStatus?.inCooldown) return true;
+    if (loading || !publicKey) return true;
     return false;
   };
 
@@ -838,54 +788,6 @@ function PromoteForm({ mounted }: { mounted: boolean }) {
           if (error) {
             return <div className="msg error">{error}</div>;
           }
-          if (checkingCooldown) {
-            return (
-              <div style={{
-                fontSize: '0.7rem',
-                color: 'var(--text-secondary)',
-                padding: '0.5rem',
-                background: 'var(--bg-hover)',
-                borderRadius: '4px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.5rem',
-                marginTop: '0.5rem'
-              }}>
-                <div style={{ width: '12px', height: '12px', border: '2px solid var(--text-secondary)', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
-                Checking availability...
-              </div>
-            );
-          }
-          if (cooldownStatus?.inCooldown) {
-            return (
-              <div style={{
-                fontSize: '0.7rem',
-                color: '#00bfff',
-                padding: '0.5rem',
-                background: 'rgba(0, 191, 255, 0.1)',
-                border: '1px solid rgba(0, 191, 255, 0.2)',
-                borderRadius: '4px',
-                marginTop: '0.5rem'
-              }}>
-                Token in cooldown - only Skip Cooldown ({PRIORITY_DUPLICATE} SOL) available
-              </div>
-            );
-          }
-          if (cooldownStatus && !cooldownStatus.inCooldown && token.trim() && valid(token.trim())) {
-            return (
-              <div style={{
-                fontSize: '0.7rem',
-                color: 'var(--green)',
-                padding: '0.5rem',
-                background: 'rgba(57, 255, 20, 0.1)',
-                border: '1px solid rgba(57, 255, 20, 0.2)',
-                borderRadius: '4px',
-                marginTop: '0.5rem'
-              }}>
-                Token available
-              </div>
-            );
-          }
           return null;
         })()}
         
@@ -898,13 +800,10 @@ function PromoteForm({ mounted }: { mounted: boolean }) {
                 border: selectedTier === STANDARD_PRICE ? '2px solid var(--green)' : '1px solid var(--border-color)',
                 background: selectedTier === STANDARD_PRICE ? 'rgba(57, 255, 20, 0.1)' : 'var(--bg-card)',
                 borderRadius: '6px',
-                cursor: cooldownStatus?.inCooldown ? 'not-allowed' : 'pointer',
+                cursor: 'pointer',
                 transition: 'all 0.2s',
-                opacity: cooldownStatus?.inCooldown ? 0.4 : 1,
-                pointerEvents: cooldownStatus?.inCooldown ? 'none' : 'auto',
               }}
               onClick={() => setSelectedTier(STANDARD_PRICE)}
-              disabled={cooldownStatus?.inCooldown}
             >
               <div style={{ fontSize: '0.875rem', fontWeight: '600', marginBottom: '0.125rem', color: 'var(--text-primary)' }}>{STANDARD_PRICE} SOL</div>
               <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>Standard</div>
@@ -915,13 +814,10 @@ function PromoteForm({ mounted }: { mounted: boolean }) {
                 border: selectedTier === PRIORITY_BASIC ? '2px solid var(--purple)' : '1px solid var(--border-color)',
                 background: selectedTier === PRIORITY_BASIC ? 'rgba(191, 0, 255, 0.1)' : 'var(--bg-card)',
                 borderRadius: '6px',
-                cursor: cooldownStatus?.inCooldown ? 'not-allowed' : 'pointer',
+                cursor: 'pointer',
                 transition: 'all 0.2s',
-                opacity: cooldownStatus?.inCooldown ? 0.4 : 1,
-                pointerEvents: cooldownStatus?.inCooldown ? 'none' : 'auto',
               }}
               onClick={() => setSelectedTier(PRIORITY_BASIC)}
-              disabled={cooldownStatus?.inCooldown}
             >
               <div style={{ fontSize: '0.875rem', fontWeight: '600', marginBottom: '0.125rem', color: 'var(--text-primary)' }}>! {PRIORITY_BASIC}</div>
               <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>Priority</div>
@@ -937,9 +833,8 @@ function PromoteForm({ mounted }: { mounted: boolean }) {
               }}
               onClick={() => setSelectedTier(PRIORITY_DUPLICATE)}
             >
-              <div style={{ fontSize: '0.875rem', fontWeight: '600', marginBottom: '0.125rem', color: 'var(--text-primary)' }}>Override {PRIORITY_DUPLICATE}</div>
-              <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>Skip Cooldown</div>
-              {cooldownStatus?.inCooldown && <div style={{ fontSize: '0.6rem', color: '#00bfff', marginTop: '0.25rem' }}>Required</div>}
+              <div style={{ fontSize: '0.875rem', fontWeight: '600', marginBottom: '0.125rem', color: 'var(--text-primary)' }}>Boost {PRIORITY_DUPLICATE}</div>
+              <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>Boost</div>
             </button>
             <button
               style={{
@@ -947,13 +842,10 @@ function PromoteForm({ mounted }: { mounted: boolean }) {
                 border: selectedTier === PRIORITY_PREMIUM ? '2px solid #ffd700' : '1px solid var(--border-color)',
                 background: selectedTier === PRIORITY_PREMIUM ? 'rgba(255, 215, 0, 0.1)' : 'var(--bg-card)',
                 borderRadius: '6px',
-                cursor: cooldownStatus?.inCooldown ? 'not-allowed' : 'pointer',
+                cursor: 'pointer',
                 transition: 'all 0.2s',
-                opacity: cooldownStatus?.inCooldown ? 0.4 : 1,
-                pointerEvents: cooldownStatus?.inCooldown ? 'none' : 'auto',
               }}
               onClick={() => setSelectedTier(PRIORITY_PREMIUM)}
-              disabled={cooldownStatus?.inCooldown}
             >
               <div style={{ fontSize: '0.875rem', fontWeight: '600', marginBottom: '0.125rem', color: 'var(--text-primary)' }}>Premium {PRIORITY_PREMIUM}</div>
               <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>Premium 1hr</div>
@@ -968,7 +860,7 @@ function PromoteForm({ mounted }: { mounted: boolean }) {
             textAlign: 'center'
           }}>
             {selectedTier === PRIORITY_PREMIUM && '1 hour display, highest priority'}
-            {selectedTier === PRIORITY_DUPLICATE && '10 min, override 2hr cooldown'}
+            {selectedTier === PRIORITY_DUPLICATE && '10 min, boosted priority'}
             {selectedTier === PRIORITY_BASIC && '10 min, priority queue'}
             {selectedTier === STANDARD_PRICE && '10 min, standard queue'}
           </div>
@@ -994,13 +886,8 @@ function PromoteForm({ mounted }: { mounted: boolean }) {
           onClick={() => pay(selectedTier)} 
           disabled={isPayDisabled()}
         >
-          {loading ? 'Processing...' : checkingCooldown ? 'Checking...' : `Pay ${selectedTier} SOL`}
+          {loading ? 'Processing...' : `Pay ${selectedTier} SOL`}
         </button>
-        
-        <div className="pricing-info" style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.5rem' }}>
-          <span>2hr cooldown per token</span>
-          <span>{PRIORITY_DUPLICATE} SOL bypass</span>
-        </div>
       </div>
     </div>
   );
@@ -1035,7 +922,7 @@ function QueueList() {
 
   const getPriorityLabel = (item: QueueItem) => {
     if (item.priorityLevel === 3) return 'Premium';
-    if (item.priorityLevel === 2) return 'Override';
+    if (item.priorityLevel === 2) return 'Boost';
     if (item.priorityLevel === 1) return 'Priority';
     return '';
   };

@@ -4,7 +4,6 @@ import {
   addToQueueAdmin,
   logTransactionAdmin,
   isSignatureUsed,
-  checkDuplicateCooldown,
   getAdminDb,
 } from '@/lib/firebase-admin';
 import {
@@ -15,7 +14,6 @@ import {
   PRIORITY_PREMIUM,
   DISPLAY_DURATION_STANDARD,
   DISPLAY_DURATION_PREMIUM,
-  DUPLICATE_COOLDOWN_MS,
   PRIORITY_LEVELS,
 } from '@/lib/constants';
 import { getInternalBaseUrl } from '@/lib/app-url';
@@ -246,35 +244,6 @@ export async function POST(request: NextRequest) {
       tierType = 'standard';
     }
 
-    // Check for duplicate address (only applies if not paying for duplicate override)
-    const duplicateCheck = await checkDuplicateCooldown(tokenMint, DUPLICATE_COOLDOWN_MS);
-    
-    if (duplicateCheck.inCooldown && paidAmount < PRIORITY_DUPLICATE) {
-      const hoursRemaining = Math.floor(duplicateCheck.remainingMs / (60 * 60 * 1000));
-      const minutesRemaining = Math.ceil((duplicateCheck.remainingMs % (60 * 60 * 1000)) / (60 * 1000));
-      
-      // Log the rejected transaction
-      await logTransactionAdmin(
-        tokenMint,
-        walletAddress,
-        paidAmount,
-        tierType,
-        signature,
-        userId || null,
-        false
-      );
-
-      return NextResponse.json(
-        { 
-          error: `This token was recently queued. Please wait ${hoursRemaining}h ${minutesRemaining}m or pay ${PRIORITY_DUPLICATE} SOL to override the cooldown.`,
-          code: 'DUPLICATE_COOLDOWN',
-          remainingMs: duplicateCheck.remainingMs,
-          overridePrice: PRIORITY_DUPLICATE
-        },
-        { status: 400 }
-      );
-    }
-
     // Log the successful transaction
     await logTransactionAdmin(
       tokenMint,
@@ -345,8 +314,8 @@ export async function POST(request: NextRequest) {
       message = 'Premium token queued (1 hour display)';
       tier = 'premium';
     } else if (priorityLevel === PRIORITY_LEVELS.DUPLICATE) {
-      message = 'Priority token queued (duplicate override)';
-      tier = 'duplicate';
+      message = 'Boost token queued';
+      tier = 'boost';
     } else if (priorityLevel === PRIORITY_LEVELS.BASIC) {
       message = 'Priority token queued';
       tier = 'basic';

@@ -28,7 +28,7 @@ function parseServiceAccountFromEnv(): ServiceAccountJson | null {
     // This preserves JSON validity while allowing "\\n" -> "\n" later for the PEM.
     const parsed = JSON.parse(raw) as ServiceAccountJson;
     return parsed && typeof parsed === 'object' ? parsed : null;
-  } catch (e) {
+  } catch {
     console.error('[Firebase Admin] FIREBASE_SERVICE_ACCOUNT_JSON is not valid JSON');
     return null;
   }
@@ -267,109 +267,6 @@ export async function isSignatureUsed(signature: string): Promise<boolean> {
   // Only block signatures that were successfully verified before.
   // Failed verification attempts should be retryable with the same signature.
   return snapshot.docs.some(doc => doc.data()?.verified === true);
-}
-
-/**
- * Check if a token address was recently used (within cooldown period)
- * Returns the time remaining in milliseconds, or 0 if not in cooldown
- */
-export async function checkDuplicateCooldown(
-  tokenMint: string,
-  cooldownMs: number
-): Promise<{ inCooldown: boolean; remainingMs: number; lastUsedAt: Date | null }> {
-  const db = getAdminDb();
-  const cutoffTime = Timestamp.fromMillis(Date.now() - cooldownMs);
-
-  // Check current token and recent queue items
-  const [currentTokenDoc, recentQueueSnapshot] = await Promise.all([
-    db.doc(CURRENT_TOKEN_DOC).get(),
-    db.collection(QUEUE_COLLECTION)
-      .where('tokenMint', '==', tokenMint)
-      .where('addedAt', '>', cutoffTime)
-      .orderBy('addedAt', 'desc')
-      .limit(1)
-      .get()
-  ]);
-
-  // Check transactions separately (may need index, handle gracefully)
-  let recentTxSnapshot: FirebaseFirestore.QuerySnapshot | null = null;
-  try {
-    recentTxSnapshot = await db.collection(TRANSACTIONS_COLLECTION)
-      .where('tokenMint', '==', tokenMint)
-      .where('verified', '==', true)
-      .where('timestamp', '>', cutoffTime)
-      .orderBy('timestamp', 'desc')
-      .limit(1)
-      .get();
-  } catch (indexError) {
-    console.warn('[Cooldown] Transaction index query failed, falling back:', indexError);
-    // Fallback: simpler query without timestamp filter
-    try {
-      const allTxForToken = await db.collection(TRANSACTIONS_COLLECTION)
-        .where('tokenMint', '==', tokenMint)
-        .where('verified', '==', true)
-        .orderBy('timestamp', 'desc')
-        .limit(1)
-        .get();
-      if (!allTxForToken.empty) {
-        const txData = allTxForToken.docs[0].data();
-        const txTime = (txData.timestamp as Timestamp)?.toMillis();
-        if (txTime && txTime > cutoffTime.toMillis()) {
-          recentTxSnapshot = allTxForToken;
-        }
-      }
-    } catch (fallbackError) {
-      console.warn('[Cooldown] Fallback query also failed:', fallbackError);
-    }
-  }
-
-  // Check if currently displaying this token
-  const currentData = currentTokenDoc.data();
-  if (currentData && currentData.tokenMint === tokenMint && currentData.queueItemId) {
-    const expiresAt = currentData.expiresAt as Timestamp | null;
-    if (expiresAt && expiresAt.toMillis() > Date.now()) {
-      const remainingMs = expiresAt.toMillis() - Date.now();
-      return {
-        inCooldown: true,
-        remainingMs: remainingMs + cooldownMs, // Add cooldown after display ends
-        lastUsedAt: new Date()
-      };
-    }
-  }
-
-  // Check recent queue items
-  if (!recentQueueSnapshot.empty) {
-    const recentItem = recentQueueSnapshot.docs[0].data();
-    const addedAt = (recentItem.addedAt as Timestamp).toMillis();
-    const timeSinceAdded = Date.now() - addedAt;
-    const remainingMs = cooldownMs - timeSinceAdded;
-
-    if (remainingMs > 0) {
-      return {
-        inCooldown: true,
-        remainingMs,
-        lastUsedAt: new Date(addedAt)
-      };
-    }
-  }
-
-  // Check recent transactions (covers tokens that were displayed and removed from queue)
-  if (recentTxSnapshot && !recentTxSnapshot.empty) {
-    const recentTx = recentTxSnapshot.docs[0].data();
-    const txTime = (recentTx.timestamp as Timestamp).toMillis();
-    const timeSinceTx = Date.now() - txTime;
-    const remainingMs = cooldownMs - timeSinceTx;
-
-    if (remainingMs > 0) {
-      return {
-        inCooldown: true,
-        remainingMs,
-        lastUsedAt: new Date(txTime)
-      };
-    }
-  }
-
-  return { inCooldown: false, remainingMs: 0, lastUsedAt: null };
 }
 
 // ============================================
