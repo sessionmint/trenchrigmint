@@ -23,6 +23,10 @@ function loadEnvFile(filePath) {
 
 loadEnvFile(path.resolve(process.cwd(), '.env.local'));
 
+function isTrue(value) {
+  return String(value || '').toLowerCase() === 'true';
+}
+
 const required = [
   'NEXT_PUBLIC_APP_URL',
   'NEXT_PUBLIC_HELIUS_API_KEY',
@@ -31,19 +35,14 @@ const required = [
   'NEXT_PUBLIC_HELIUS_WS_URL',
   'NEXT_PUBLIC_TREASURY_WALLET',
   'NEXT_PUBLIC_DEFAULT_TOKEN',
-  'HELIUS_WEBHOOK_AUTH_TOKEN',
-  'AUTOBLOW_DEVICE_TOKEN',
-  'AUTOBLOW_CLUSTER',
-  'AUTOBLOW_ENABLED',
   'NEXT_PUBLIC_FIREBASE_API_KEY',
   'NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN',
   'NEXT_PUBLIC_FIREBASE_PROJECT_ID',
   'NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET',
   'NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID',
   'NEXT_PUBLIC_FIREBASE_APP_ID',
-  'REDIS_URL',
   'ADMIN_API_KEY',
-  'CRON_SECRET',
+  // CRON_SECRET is optional on Vercel (x-vercel-cron header), but useful for manual calls.
 ];
 
 const weakSecretPatterns = [
@@ -56,6 +55,29 @@ const weakSecretPatterns = [
 const missing = [];
 const weak = [];
 const warnings = [];
+
+const autoblowEnabled = isTrue(process.env.AUTOBLOW_ENABLED);
+if (autoblowEnabled) {
+  required.push('AUTOBLOW_ENABLED', 'AUTOBLOW_DEVICE_TOKEN');
+  // Cluster can be discovered; allow empty but warn.
+  if (!(process.env.AUTOBLOW_CLUSTER || '').trim()) {
+    warnings.push('AUTOBLOW_CLUSTER not set. Cluster auto-discovery will be used.');
+  }
+} else {
+  warnings.push('AUTOBLOW_ENABLED is not "true". Device control will be disabled.');
+}
+
+if (!(process.env.REDIS_URL || '').trim()) {
+  warnings.push('REDIS_URL not set. Chart-sync sessions will use Firestore fallback (recommended to add Redis for reliability).');
+}
+
+if (!(process.env.CRON_SECRET || '').trim()) {
+  warnings.push('CRON_SECRET not set. Vercel cron will still work, but manual cron calls will not be protected.');
+}
+
+if (!(process.env.HELIUS_WEBHOOK_AUTH_TOKEN || '').trim()) {
+  warnings.push('HELIUS_WEBHOOK_AUTH_TOKEN not set. /api/helius-webhook will be effectively unprotected in production.');
+}
 
 for (const key of required) {
   if (!process.env[key] || process.env[key].trim() === '') {
@@ -80,10 +102,6 @@ for (const key of ['ADMIN_API_KEY', 'CRON_SECRET']) {
 
 if (!hasAdminJson && (process.env.FIREBASE_PRIVATE_KEY || '').includes('BEGIN PRIVATE KEY') === false) {
   warnings.push('FIREBASE_PRIVATE_KEY does not look like a private key.');
-}
-
-if ((process.env.AUTOBLOW_ENABLED || '').toLowerCase() !== 'true') {
-  warnings.push('AUTOBLOW_ENABLED is not "true". Device control will be disabled.');
 }
 
 if (process.env.NEXT_PUBLIC_APP_BASEPATH?.trim() || process.env.NEXT_PUBLIC_TRENCHRIG_PATH?.trim()) {

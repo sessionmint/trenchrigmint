@@ -52,10 +52,10 @@ export type PriorityLevel = typeof PRIORITY_LEVELS[keyof typeof PRIORITY_LEVELS]
 
 // Server-side only Helius API key for webhook management (MAINNET)
 // This should NOT be exposed to the client - use HELIUS_API_KEY env var
-export const HELIUS_API_KEY = process.env.HELIUS_API_KEY || "";
+export const HELIUS_API_KEY = (process.env.HELIUS_API_KEY || "").trim();
 
 // Client-side Helius API key (MAINNET for payments)
-export const HELIUS_CLIENT_API_KEY = process.env.NEXT_PUBLIC_HELIUS_API_KEY || "";
+export const HELIUS_CLIENT_API_KEY = (process.env.NEXT_PUBLIC_HELIUS_API_KEY || "").trim();
 
 // ============================================
 // NETWORK CONFIGURATION
@@ -73,9 +73,12 @@ const HELIUS_RPC_BASE = process.env.NEXT_PUBLIC_HELIUS_RPC_URL || "https://mainn
 const HELIUS_WS_BASE = process.env.NEXT_PUBLIC_HELIUS_WS_URL || "wss://mainnet.helius-rpc.com";
 
 function withApiKey(baseUrl: string, apiKey: string): string {
-  if (!apiKey || baseUrl.includes('api-key=')) return baseUrl;
-  const separator = baseUrl.includes('?') ? '&' : '?';
-  return `${baseUrl}${separator}api-key=${apiKey}`;
+  const cleanBase = (baseUrl || "").trim();
+  const cleanKey = (apiKey || "").trim();
+  if (!cleanBase) return "";
+  if (!cleanKey || cleanBase.includes('api-key=')) return cleanBase;
+  const separator = cleanBase.includes('?') ? '&' : '?';
+  return `${cleanBase}${separator}api-key=${encodeURIComponent(cleanKey)}`;
 }
 
 export const HELIUS_RPC_URL = withApiKey(HELIUS_RPC_BASE, HELIUS_CLIENT_API_KEY);
@@ -87,7 +90,11 @@ export const HELIUS_MAINNET_API = "https://api.helius.xyz/v0";
 
 // Helius webhook authorization token for verifying incoming webhooks
 // Set this to match the auth header you configured in your Helius webhook dashboard
-export const HELIUS_WEBHOOK_AUTH_TOKEN = process.env.HELIUS_WEBHOOK_AUTH_TOKEN || "";
+export const HELIUS_WEBHOOK_AUTH_TOKEN = (process.env.HELIUS_WEBHOOK_AUTH_TOKEN || "").trim();
+
+// If true, webhook manager will delete extra webhooks under the same API key.
+// Default is false to avoid accidentally deleting unrelated webhooks.
+export const HELIUS_WEBHOOK_CLEANUP_EXTRAS = (process.env.HELIUS_WEBHOOK_CLEANUP_EXTRAS || "").toLowerCase() === "true";
 
 // ============================================
 // HELIUS WEBHOOK IP ALLOWLIST
@@ -124,8 +131,8 @@ export const HELIUS_WEBHOOK_IPS = [
 // DEVICE API CONFIGURATION
 // ============================================
 
-export const DEVICE_API_URL = process.env.DEVICE_API_URL || process.env.NEXT_PUBLIC_DEVICE_API_URL || "";
-export const DEVICE_API_KEY = process.env.DEVICE_API_KEY || process.env.NEXT_PUBLIC_DEVICE_API_KEY || "";
+export const DEVICE_API_URL = (process.env.DEVICE_API_URL || process.env.NEXT_PUBLIC_DEVICE_API_URL || "").trim();
+export const DEVICE_API_KEY = (process.env.DEVICE_API_KEY || process.env.NEXT_PUBLIC_DEVICE_API_KEY || "").trim();
 
 // ============================================
 // SECURITY CONFIGURATION
@@ -133,13 +140,13 @@ export const DEVICE_API_KEY = process.env.DEVICE_API_KEY || process.env.NEXT_PUB
 
 // Admin API key for protected endpoints (webhook management, queue processing)
 // Generate a secure random string and set in environment
-export const ADMIN_API_KEY = process.env.ADMIN_API_KEY || "";
+export const ADMIN_API_KEY = (process.env.ADMIN_API_KEY || "").trim();
 
 // Vercel cron secret for queue processing
-export const CRON_SECRET = process.env.CRON_SECRET || "";
+export const CRON_SECRET = (process.env.CRON_SECRET || "").trim();
 
 // Enable IP verification for webhooks (recommended for production)
-export const VERIFY_WEBHOOK_IP = process.env.VERIFY_WEBHOOK_IP === "true";
+export const VERIFY_WEBHOOK_IP = (process.env.VERIFY_WEBHOOK_IP || "").toLowerCase() === "true";
 
 // Rate limiting configuration
 export const RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minute

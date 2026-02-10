@@ -6,6 +6,7 @@ import {
   DEFAULT_TOKEN_MINT,
   ADMIN_API_KEY,
   HELIUS_WEBHOOK_AUTH_TOKEN,
+  HELIUS_WEBHOOK_CLEANUP_EXTRAS,
 } from '@/lib/constants';
 import { getAppBaseUrl } from '@/lib/app-url';
 
@@ -57,13 +58,14 @@ interface WebhookConfig {
 // ============================================
 
 const HELIUS_API_BASE = HELIUS_MAINNET_API;
+const HELIUS_API_KEY_QS = encodeURIComponent(HELIUS_API_KEY);
 
 async function getExistingWebhooks(): Promise<HeliusWebhook[]> {
   if (!HELIUS_API_KEY) {
     throw new Error('Helius API key not configured');
   }
 
-  const response = await fetch(`${HELIUS_API_BASE}/webhooks?api-key=${HELIUS_API_KEY}`);
+  const response = await fetch(`${HELIUS_API_BASE}/webhooks?api-key=${HELIUS_API_KEY_QS}`);
 
   if (!response.ok) {
     const error = await response.text();
@@ -91,7 +93,7 @@ async function createWebhook(webhookUrl: string, tokenMint: string): Promise<Hel
     webhookConfig.authHeader = HELIUS_WEBHOOK_AUTH_TOKEN;
   }
 
-  const response = await fetch(`${HELIUS_API_BASE}/webhooks?api-key=${HELIUS_API_KEY}`, {
+  const response = await fetch(`${HELIUS_API_BASE}/webhooks?api-key=${HELIUS_API_KEY_QS}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(webhookConfig),
@@ -119,7 +121,7 @@ async function updateWebhook(webhookId: string, tokenMint: string): Promise<Heli
     updateConfig.authHeader = HELIUS_WEBHOOK_AUTH_TOKEN;
   }
 
-  const response = await fetch(`${HELIUS_API_BASE}/webhooks/${webhookId}?api-key=${HELIUS_API_KEY}`, {
+  const response = await fetch(`${HELIUS_API_BASE}/webhooks/${webhookId}?api-key=${HELIUS_API_KEY_QS}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(updateConfig),
@@ -138,7 +140,7 @@ async function deleteWebhook(webhookId: string): Promise<void> {
     throw new Error('Helius API key not configured');
   }
 
-  const response = await fetch(`${HELIUS_API_BASE}/webhooks/${webhookId}?api-key=${HELIUS_API_KEY}`, {
+  const response = await fetch(`${HELIUS_API_BASE}/webhooks/${webhookId}?api-key=${HELIUS_API_KEY_QS}`, {
     method: 'DELETE',
   });
 
@@ -209,6 +211,11 @@ async function ensureSingleWebhook(existingWebhooks: HeliusWebhook[], storedWebh
   const webhooksToDelete = existingWebhooks.filter(w => w.webhookID !== webhookToKeep!.webhookID);
 
   if (webhooksToDelete.length > 0) {
+    if (!HELIUS_WEBHOOK_CLEANUP_EXTRAS) {
+      console.log(`[Webhook] Found ${webhooksToDelete.length} extra webhook(s). Cleanup disabled (set HELIUS_WEBHOOK_CLEANUP_EXTRAS=true to delete extras).`);
+      return webhookToKeep;
+    }
+
     console.log(`[Webhook] Cleaning up ${webhooksToDelete.length} extra webhook(s)`);
     for (const w of webhooksToDelete) {
       try {

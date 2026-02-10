@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminDb, FieldValue, Timestamp } from '@/lib/firebase-admin';
 import { DEFAULT_TOKEN_MINT, HELIUS_API_KEY, ADMIN_API_KEY, CRON_SECRET } from '@/lib/constants';
-import { getAppBaseUrl } from '@/lib/app-url';
+import { getInternalBaseUrl, getPublicBaseUrl } from '@/lib/app-url';
 
 // ============================================
 // AUTHENTICATION
@@ -64,7 +64,7 @@ interface CurrentToken {
 // WEBHOOK UPDATE
 // ============================================
 
-async function updateHeliusWebhook(tokenMint: string, baseUrl: string): Promise<boolean> {
+async function updateHeliusWebhook(tokenMint: string, internalBaseUrl: string, publicBaseUrl: string): Promise<boolean> {
   if (!HELIUS_API_KEY) {
     console.log('[Process] Helius API key not configured, skipping webhook update');
     return false;
@@ -83,13 +83,13 @@ async function updateHeliusWebhook(tokenMint: string, baseUrl: string): Promise<
   console.log('[Process] Webhook sync requested:', { from: lastToken, to: tokenMint });
 
   try {
-    const response = await fetch(`${baseUrl}/api/webhook/manage`, {
+    const response = await fetch(`${internalBaseUrl}/api/webhook/manage`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${adminKey}`,
       },
-      body: JSON.stringify({ tokenMint, webhookUrl: baseUrl }),
+      body: JSON.stringify({ tokenMint, webhookUrl: publicBaseUrl }),
     });
 
     if (!response.ok) {
@@ -186,7 +186,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const baseUrl = getAppBaseUrl(request.nextUrl.origin);
+    const internalBaseUrl = getInternalBaseUrl(request.nextUrl.origin);
+    const publicBaseUrl = getPublicBaseUrl(request.nextUrl.origin);
 
     // Get current token
     const current = await getCurrentToken();
@@ -226,7 +227,7 @@ export async function POST(request: NextRequest) {
     if (current?.queueItemId && current.tokenMint !== DEFAULT_TOKEN_MINT) {
       console.log('[Process] Stopping device session for expired token:', current.tokenMint);
       try {
-        await fetch(`${baseUrl}/api/device/autoblow/session`, {
+        await fetch(`${internalBaseUrl}/api/device/autoblow/session`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ action: 'stop', tokenMint: current.tokenMint })
@@ -254,7 +255,7 @@ export async function POST(request: NextRequest) {
       await removeFromQueue(nextItem.id);
 
       // Update webhook to track new token
-      const webhookSynced = await updateHeliusWebhook(nextItem.tokenMint, baseUrl);
+      const webhookSynced = await updateHeliusWebhook(nextItem.tokenMint, internalBaseUrl, publicBaseUrl);
 
       // Note: Device session will be started by the status endpoint after 10-second cooldown
       // This is handled in /api/device/status to be serverless-compatible
@@ -276,7 +277,7 @@ export async function POST(request: NextRequest) {
       await setCurrentToken(DEFAULT_TOKEN_MINT, null, null, false, 0, 0, null);
 
       // Update webhook to track default token
-      const webhookSynced = await updateHeliusWebhook(DEFAULT_TOKEN_MINT, baseUrl);
+      const webhookSynced = await updateHeliusWebhook(DEFAULT_TOKEN_MINT, internalBaseUrl, publicBaseUrl);
 
       return NextResponse.json({
         processed: true,

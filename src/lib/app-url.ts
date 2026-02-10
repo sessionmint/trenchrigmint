@@ -27,17 +27,30 @@ export function withAppBasePath(path: string): string {
   return `${basePath}${normalizedPath}`;
 }
 
-export function getAppBaseUrl(origin: string): string {
+/**
+ * Build a base URL for internal server-to-server calls within the current request's origin.
+ * This intentionally ignores NEXT_PUBLIC_APP_URL so misconfiguration can't break internal fetches.
+ */
+export function getInternalBaseUrl(origin: string): string {
   const basePath = getConfiguredBasePath();
-  if (process.env.NODE_ENV === 'development') {
-    const normalizedOrigin = stripTrailingSlashes(origin);
-    return basePath ? `${normalizedOrigin}${basePath}` : normalizedOrigin;
-  }
+  const normalizedOrigin = stripTrailingSlashes(origin);
+  return basePath ? `${normalizedOrigin}${basePath}` : normalizedOrigin;
+}
 
+/**
+ * Build the public, stable base URL for webhook URLs and external callbacks.
+ * Prefer NEXT_PUBLIC_APP_URL when present; fall back to the current request origin.
+ */
+export function getPublicBaseUrl(origin: string): string {
   const configuredUrl = process.env.NEXT_PUBLIC_APP_URL?.trim();
   if (configuredUrl) {
     return stripTrailingSlashes(configuredUrl);
   }
-  const normalizedOrigin = stripTrailingSlashes(origin);
-  return basePath ? `${normalizedOrigin}${basePath}` : normalizedOrigin;
+  return getInternalBaseUrl(origin);
+}
+
+export function getAppBaseUrl(origin: string): string {
+  // Backwards-compatible alias: historically this function returned NEXT_PUBLIC_APP_URL in production.
+  // Keep that behavior for webhook URLs, while internal callers should use getInternalBaseUrl().
+  return getPublicBaseUrl(origin);
 }

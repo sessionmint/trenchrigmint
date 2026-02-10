@@ -18,7 +18,7 @@ import {
   DUPLICATE_COOLDOWN_MS,
   PRIORITY_LEVELS,
 } from '@/lib/constants';
-import { getAppBaseUrl } from '@/lib/app-url';
+import { getInternalBaseUrl } from '@/lib/app-url';
 
 // ============================================
 // TYPES
@@ -40,12 +40,13 @@ function sleep(ms: number): Promise<void> {
 }
 
 function buildRpcUrl(): string {
-  const base = process.env.NEXT_PUBLIC_HELIUS_RPC_URL || 'https://mainnet.helius-rpc.com';
+  const base = (process.env.NEXT_PUBLIC_HELIUS_RPC_URL || 'https://mainnet.helius-rpc.com').trim();
+  if (!base) return 'https://mainnet.helius-rpc.com';
   if (base.includes('api-key=')) return base;
-  const apiKey = process.env.HELIUS_API_KEY || process.env.NEXT_PUBLIC_HELIUS_API_KEY || '';
+  const apiKey = (process.env.HELIUS_API_KEY || process.env.NEXT_PUBLIC_HELIUS_API_KEY || '').trim();
   if (!apiKey) return base;
   const separator = base.includes('?') ? '&' : '?';
-  return `${base}${separator}api-key=${apiKey}`;
+  return `${base}${separator}api-key=${encodeURIComponent(apiKey)}`;
 }
 
 // ============================================
@@ -58,7 +59,8 @@ async function verifyPayment(
 ): Promise<{ verified: boolean; amount: number; error?: string }> {
   try {
     const rpcUrl = buildRpcUrl();
-    console.log('[Payment] Verifying on RPC:', rpcUrl);
+    // Avoid leaking API keys in logs.
+    console.log('[Payment] Verifying on RPC:', rpcUrl.replace(/api-key=[^&]+/i, 'api-key=***'));
     console.log('[Payment] Signature:', signature);
     console.log('[Payment] Expected payer:', expectedPayer);
     console.log('[Payment] Treasury wallet:', TREASURY_WALLET);
@@ -304,6 +306,7 @@ export async function POST(request: NextRequest) {
     // If queue was empty, trigger processing to make this token active immediately
     let processedImmediately = false;
     let processError: string | null = null;
+    let processResult: unknown = null;
 
     if (queueEmpty) {
       console.log('[Queue Add] Queue was empty, triggering immediate processing');
@@ -313,7 +316,7 @@ export async function POST(request: NextRequest) {
       await new Promise(resolve => setTimeout(resolve, 500));
 
       // Use internal fetch with absolute URL
-      const baseUrl = getAppBaseUrl(request.nextUrl.origin);
+      const baseUrl = getInternalBaseUrl(request.nextUrl.origin);
       console.log('[Queue Add] Using base URL:', baseUrl);
 
       try {
@@ -321,11 +324,11 @@ export async function POST(request: NextRequest) {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
         });
-        const processResult = await processRes.json();
+        processResult = await processRes.json();
         console.log('[Queue Add] Process result:', processResult);
-        processedImmediately = !!(processRes.ok && processResult?.processed);
+        processedImmediately = !!(processRes.ok && (processResult as { processed?: unknown } | null)?.processed);
         if (!processedImmediately) {
-          processError = processResult?.error || 'Queue processing did not complete immediately';
+          processError = (processResult as { error?: string } | null)?.error || 'Queue processing did not complete immediately';
         }
       } catch (e) {
         console.error('[Queue Add] Failed to trigger processing:', e);
@@ -360,7 +363,9 @@ export async function POST(request: NextRequest) {
       displayDuration,
       tier,
       processedImmediately,
-      processError
+      processError,
+      // Expose processing details so the client can update UI immediately even if Firestore listeners lag.
+      processResult,
     });
   } catch (error) {
     console.error('[Queue Add] Error:', error);

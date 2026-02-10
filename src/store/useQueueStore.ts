@@ -257,8 +257,56 @@ export const useQueueStore = create<QueueStore>((set, get) => ({
 
     console.log('[QueueStore] Added to queue:', result);
 
-    // Force refresh state from Firestore after adding
-    await get().refreshState();
+    // If the server activated the token immediately, update UI from the API payload
+    // (helps when Firestore listeners are slow/misconfigured during demo deploys).
+    const pr = (result as { processResult?: unknown } | null)?.processResult;
+    const processedImmediately = !!(result as { processedImmediately?: unknown } | null)?.processedImmediately;
+    const applyProcessResult = (processResult: unknown) => {
+      if (!processResult || typeof processResult !== 'object') return false;
+      const r = processResult as { processed?: boolean; action?: string; tokenMint?: string; expiresAt?: string; queueItemId?: string; walletAddress?: string; isPriority?: boolean; priorityLevel?: number; displayDuration?: number };
+      if (!r.processed) return false;
+
+      if (r.action === 'reset_to_default' && r.tokenMint) {
+        set({ currentToken: r.tokenMint, currentItem: null });
+        return true;
+      }
+
+      if (r.action === 'next_item' && r.tokenMint) {
+        const expiresAt = r.expiresAt ? new Date(r.expiresAt).getTime() : 0;
+        set({
+          currentToken: r.tokenMint,
+          currentItem: {
+            id: r.queueItemId || r.tokenMint,
+            tokenMint: r.tokenMint,
+            walletAddress: r.walletAddress || '',
+            expiresAt,
+            isPriority: !!(r.isPriority || (r.priorityLevel || 0) > 0),
+            priorityLevel: r.priorityLevel || 0,
+            displayDuration: r.displayDuration || 600000,
+            addedAt: Date.now(),
+          },
+        });
+        return true;
+      }
+
+      return false;
+    };
+
+    const applied = processedImmediately ? applyProcessResult(pr) : false;
+
+    if (!applied) {
+      // Best-effort: try to advance queue right away (no-op if current token is still active).
+      await get().processQueue();
+      // Then sync from Firestore (if available) for queue list + any missed fields.
+      await get().refreshState();
+    } else {
+      // Don't immediately refresh; Firestore reads can be stale for a moment and overwrite the correct token.
+      if (typeof window !== 'undefined') {
+        setTimeout(() => {
+          get().refreshState();
+        }, 2000);
+      }
+    }
 
     return result;
   },
@@ -269,6 +317,64 @@ export const useQueueStore = create<QueueStore>((set, get) => ({
   refreshState: async () => {
     console.log('[QueueStore] Refreshing state from Firestore...');
     try {
+      // Prefer server-side state when client Firestore permissions are locked down.
+      // This keeps the demo functional even if Firestore rules are restrictive.
+      try {
+        const res = await fetch(withAppBasePath('/api/state'), { method: 'GET' });
+        if (res.ok) {
+          const data = await res.json() as {
+            currentToken: null | {
+              tokenMint: string | null;
+              queueItemId: string | null;
+              expiresAt: number;
+              isPriority: boolean;
+              priorityLevel: number;
+              displayDuration: number;
+              walletAddress: string | null;
+            };
+            queue: Array<{
+              id: string;
+              tokenMint: string;
+              walletAddress: string;
+              expiresAt: number;
+              isPriority: boolean;
+              priorityLevel: number;
+              displayDuration: number;
+              addedAt: number;
+            }>;
+          };
+
+          if (Array.isArray(data.queue)) {
+            set({ queue: data.queue });
+          }
+
+          if (data.currentToken && data.currentToken.tokenMint) {
+            set({
+              currentToken: data.currentToken.tokenMint,
+              currentItem: data.currentToken.queueItemId ? {
+                id: data.currentToken.queueItemId,
+                tokenMint: data.currentToken.tokenMint,
+                walletAddress: data.currentToken.walletAddress || '',
+                expiresAt: data.currentToken.expiresAt || 0,
+                isPriority: !!data.currentToken.isPriority,
+                priorityLevel: data.currentToken.priorityLevel || 0,
+                displayDuration: data.currentToken.displayDuration || 600000,
+                addedAt: 0,
+              } : null,
+            });
+          }
+
+          // If server says no current token doc, fall through to client default handling.
+          if (data.currentToken === null) {
+            set({ currentToken: DEFAULT_TOKEN_MINT, currentItem: null });
+          }
+
+          return;
+        }
+      } catch (e) {
+        console.warn('[QueueStore] /api/state failed, falling back to client Firestore:', e);
+      }
+
       const [queueItems, currentToken] = await Promise.all([
         getQueueDB(),
         getCurrentTokenDB(),

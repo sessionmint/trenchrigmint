@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQueueStore } from '@/store/useQueueStore';
 import { initializeAuth, subscribeToAuthState } from '@/lib/firebase';
 
@@ -8,6 +8,8 @@ export const FirestoreInit = () => {
   const initialize = useQueueStore((state) => state.initialize);
   const isInitialized = useQueueStore((state) => state.isInitialized);
   const [authInitialized, setAuthInitialized] = useState(false);
+  const cleanupRef = useRef<null | (() => void)>(null);
+  const startedRef = useRef(false);
 
   // Initialize anonymous auth when component mounts
   useEffect(() => {
@@ -17,21 +19,28 @@ export const FirestoreInit = () => {
 
     const setupAuth = async () => {
       try {
+        let authOk = false;
         // Initialize anonymous auth
         await initializeAuth();
         console.log('[FirestoreInit] Auth initialized successfully');
+        authOk = true;
         setAuthInitialized(true);
 
-        // Subscribe to auth state changes
-        authUnsubscribe = subscribeToAuthState((user) => {
-          if (user) {
-            console.log('[FirestoreInit] User signed in:', user.uid);
-          } else {
-            console.log('[FirestoreInit] No user signed in');
-          }
-        });
+        if (authOk) {
+          // Subscribe to auth state changes
+          authUnsubscribe = subscribeToAuthState((user) => {
+            if (user) {
+              console.log('[FirestoreInit] User signed in:', user.uid);
+            } else {
+              console.log('[FirestoreInit] No user signed in');
+            }
+          });
+        }
       } catch (error) {
         console.error('[FirestoreInit] Auth setup error:', error);
+        // For demo deploys, don't hard-block Firestore listeners on auth issues.
+        // If your Firestore rules require auth, you'll still see permission errors in the listeners.
+        setAuthInitialized(true);
       }
     };
 
@@ -48,12 +57,21 @@ export const FirestoreInit = () => {
   useEffect(() => {
     console.log('[FirestoreInit] Checking initialization:', { isInitialized, authInitialized });
 
-    if (!isInitialized && authInitialized) {
+    if (authInitialized && !startedRef.current) {
+      startedRef.current = true;
       console.log('[FirestoreInit] Starting Firestore listeners...');
-      const cleanup = initialize();
-      return cleanup;
+      cleanupRef.current = initialize();
     }
-  }, [initialize, isInitialized, authInitialized]);
+  }, [initialize, authInitialized, isInitialized]);
+
+  // Cleanup listeners on unmount only (don't tear down just because isInitialized flips)
+  useEffect(() => {
+    return () => {
+      if (cleanupRef.current) cleanupRef.current();
+      cleanupRef.current = null;
+      startedRef.current = false;
+    };
+  }, []);
 
   return null;
 };

@@ -8,7 +8,7 @@ import {
 import { getDeviceSession, getAdminDb } from '@/lib/firebase-admin';
 import { AutoblowDeviceState, DeviceSessionStatus, PublicDeviceStatus } from '@/lib/device/types';
 import { resolveAutoblowClusterUrl } from '@/lib/autoblow/cluster';
-import { getAppBaseUrl } from '@/lib/app-url';
+import { getInternalBaseUrl } from '@/lib/app-url';
 
 const SESSION_COOLDOWN_MS = 10000; // 10 seconds before starting device session
 
@@ -74,7 +74,7 @@ export async function GET(request: NextRequest) {
 
   try {
     const deviceState = await getDeviceState();
-    const baseUrl = getAppBaseUrl(request.nextUrl.origin);
+    const baseUrl = getInternalBaseUrl(request.nextUrl.origin);
 
     // Check if we need to handle cooldown (applies to both paid tokens AND default token)
     let cooldownInfo: { active: boolean; remainingMs: number; totalMs: number } | undefined;

@@ -185,8 +185,9 @@ export async function getRecentTokenTransactions(tokenMint: string): Promise<Enh
   }
 
   try {
+    const key = encodeURIComponent(HELIUS_API_KEY);
     const response = await fetch(
-      `${HELIUS_MAINNET_API}/addresses/${tokenMint}/transactions?api-key=${HELIUS_API_KEY}&limit=20&type=SWAP`
+      `${HELIUS_MAINNET_API}/addresses/${tokenMint}/transactions?api-key=${key}&limit=20&type=SWAP`
     );
     
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -208,7 +209,8 @@ export async function getTokenMetadata(tokenMint: string): Promise<Record<string
   }
 
   try {
-    const response = await fetch(`${HELIUS_MAINNET_API}/token-metadata?api-key=${HELIUS_API_KEY}`, {
+    const key = encodeURIComponent(HELIUS_API_KEY);
+    const response = await fetch(`${HELIUS_MAINNET_API}/token-metadata?api-key=${key}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ mintAccounts: [tokenMint] }),
