@@ -30,8 +30,9 @@ const BLOB_CURRENT_FILE = `${BLOB_PREFIX}/current.json`;
 const BLOB_SIGNATURE_FILE = `${BLOB_PREFIX}/signatures.json`;
 const BLOB_TXLOG_FILE = `${BLOB_PREFIX}/txlog.json`;
 
-let redisClient: RedisClientType | null = null;
-let redisInitPromise: Promise<RedisClientType | null> | null = null;
+// Typed loosely to avoid TS conflicts with multiple redis client instances in build environments.
+let redisClient: RedisClientType | null | any = null;
+let redisInitPromise: Promise<RedisClientType | null> | null | any = null;
 let loggedNoRedisConfig = false;
 let loggedRedisError = false;
 
@@ -96,10 +97,10 @@ async function getRedis(): Promise<RedisClientType | null> {
 
         await client.connect();
         await client.ping();
-        redisClient = client;
+        redisClient = client as unknown as RedisClientType;
         loggedRedisError = false;
         console.log('[QueueDriver] Redis connected');
-        return client;
+        return redisClient;
       } catch (error) {
         if (!loggedRedisError) {
           loggedRedisError = true;
@@ -113,7 +114,7 @@ async function getRedis(): Promise<RedisClientType | null> {
     })();
   }
 
-  return redisInitPromise;
+  return redisInitPromise as Promise<RedisClientType | null>;
 }
 
 function redisScore(priorityLevel: number): number {
