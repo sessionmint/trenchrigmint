@@ -106,6 +106,26 @@ export async function POST(request: NextRequest) {
         // Check for existing session
         const existing = await getActiveSessionForToken(tokenMint);
         if (existing) {
+          const command = await processSessionTick(existing.sessionId);
+          let deviceResult = false;
+          if (command) {
+            deviceResult = await sendCommand(command);
+          }
+
+          // Keep Firestore fresh even when reusing the same active session.
+          try {
+            const existingStatus = await getSessionStatus(existing.sessionId);
+            await updateDeviceSession(
+              tokenMint,
+              existing.modeId,
+              getModeName(existing.modeId),
+              existingStatus.lastCommand?.speed || existing.lastSpeed,
+              existingStatus.lastCommand?.amplitude || existing.lastAmplitude
+            );
+          } catch (fsError) {
+            console.error('[Session] Failed to refresh Firestore for existing session:', fsError);
+          }
+
           // Return existing session info
           const status = await getSessionStatus(existing.sessionId);
           return NextResponse.json({
@@ -113,7 +133,9 @@ export async function POST(request: NextRequest) {
             action: 'existing_session',
             sessionId: existing.sessionId,
             mode: getModeName(existing.modeId),
-            status
+            status,
+            command,
+            deviceResult
           });
         }
 

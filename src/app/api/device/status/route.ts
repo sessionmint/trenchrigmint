@@ -11,6 +11,8 @@ import { resolveAutoblowClusterUrl } from '@/lib/autoblow/cluster';
 import { getInternalBaseUrl } from '@/lib/app-url';
 
 const SESSION_COOLDOWN_MS = 10000; // 10 seconds before starting device session
+const FIREBASE_SESSION_STALE_MS = 90000; // 90 seconds without updates is considered stale
+const TICK_KICK_MIN_INTERVAL_MS = 30000; // Avoid hammering tick endpoint
 
 // Environment variables for device configuration
 const AUTOBLOW_DEVICE_TOKEN = process.env.AUTOBLOW_DEVICE_TOKEN || '';
@@ -20,7 +22,16 @@ const AUTOBLOW_CLUSTER = process.env.AUTOBLOW_CLUSTER || '';
 // Cache connection status
 let lastCheckTime = 0;
 let lastStatus: PublicDeviceStatus = { connected: false, state: 'unknown' };
+let lastTickKickAt = 0;
 const CACHE_DURATION = 3000; // 3 seconds - matches client poll minimum
+
+interface CurrentTokenDoc {
+  tokenMint?: string;
+  queueItemId?: string | null;
+  sessionStarted?: boolean;
+  displayDuration?: number;
+  activeAt?: { toMillis?: () => number };
+}
 
 async function getClusterUrl(): Promise<string> {
   return resolveAutoblowClusterUrl(AUTOBLOW_DEVICE_TOKEN, AUTOBLOW_CLUSTER);
@@ -73,16 +84,16 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const deviceState = await getDeviceState();
     const baseUrl = getInternalBaseUrl(request.nextUrl.origin);
+    const db = getAdminDb();
+    let currentToken: CurrentTokenDoc | null = null;
 
     // Check if we need to handle cooldown (applies to both paid tokens AND default token)
     let cooldownInfo: { active: boolean; remainingMs: number; totalMs: number } | undefined;
 
     try {
-      const db = getAdminDb();
       const currentTokenDoc = await db.doc('settings/currentToken').get();
-      const currentToken = currentTokenDoc.data();
+      currentToken = (currentTokenDoc.data() || null) as CurrentTokenDoc | null;
 
       // Apply cooldown whenever sessionStarted is false and activeAt is set
       if (currentToken && !currentToken.sessionStarted && currentToken.activeAt) {
@@ -112,13 +123,20 @@ export async function GET(request: NextRequest) {
                   durationMs: currentToken.displayDuration || undefined
                 })
               });
+              const sessionPayload = await sessionRes.json().catch(() => null) as {
+                action?: string;
+                deviceResult?: boolean;
+              } | null;
+              const startedSuccessfully =
+                sessionRes.ok &&
+                sessionPayload?.deviceResult === true;
 
-              if (sessionRes.ok) {
-                // Mark session as started only on success
+              if (startedSuccessfully) {
+                // Mark session as started only when a device command was accepted.
                 await db.doc('settings/currentToken').update({ sessionStarted: true });
                 console.log('[DeviceStatus] Session started successfully');
               } else {
-                console.error('[DeviceStatus] Session start failed:', await sessionRes.text());
+                console.error('[DeviceStatus] Session start failed:', sessionPayload);
               }
             } catch (err) {
               console.error('[DeviceStatus] Session start error:', err);
@@ -135,6 +153,14 @@ export async function GET(request: NextRequest) {
       console.error('[DeviceStatus] Session check error:', sessionCheckError);
     }
 
+    // Device state can fail independently when hardware is offline; session logic must still run.
+    let deviceState: AutoblowDeviceState | undefined;
+    try {
+      deviceState = await getDeviceState();
+    } catch (deviceError) {
+      console.error('[DeviceStatus] Device state error:', deviceError);
+    }
+
     // Get session info from Firestore (persisted across serverless instances)
     let sessionInfo: DeviceSessionStatus | undefined;
     let firestoreSession = null;
@@ -144,6 +170,30 @@ export async function GET(request: NextRequest) {
       console.error('[DeviceStatus] Firestore error:', fsError);
     }
     const sessions = await getAllActiveSessions();
+
+    // Fallback keep-alive: if cron is delayed and session data is stale, kick one tick.
+    const shouldKickTick =
+      !cooldownInfo?.active &&
+      !!currentToken?.queueItemId &&
+      !!currentToken?.sessionStarted &&
+      (now - lastTickKickAt >= TICK_KICK_MIN_INTERVAL_MS) &&
+      (!firestoreSession || (now - firestoreSession.updatedAt.getTime() > FIREBASE_SESSION_STALE_MS));
+
+    if (shouldKickTick) {
+      lastTickKickAt = now;
+      const adminKey = process.env.ADMIN_API_KEY;
+      const cronSecret = process.env.CRON_SECRET;
+      const authToken = adminKey || cronSecret || '';
+      try {
+        await fetch(`${baseUrl}/api/device/tick`, {
+          method: 'GET',
+          headers: authToken ? { Authorization: `Bearer ${authToken}` } : undefined,
+        });
+        console.log('[DeviceStatus] Triggered fallback /api/device/tick for stale session');
+      } catch (tickError) {
+        console.error('[DeviceStatus] Failed fallback tick trigger:', tickError);
+      }
+    }
 
     // Determine state based on device response
     // The Autoblow API returns operationalMode which can be:
@@ -167,9 +217,9 @@ export async function GET(request: NextRequest) {
     // Handle cooldown state first
     if (cooldownInfo?.active) {
       state = 'cooldown';
-    } else if (isPlaying) {
+    } else if (deviceState && isPlaying) {
       state = 'stroking';
-    } else if (hasActiveSpeed) {
+    } else if (deviceState && hasActiveSpeed) {
       state = 'active';
     } else if (sessions.length > 0) {
       // If we have active sessions, device should be considered active even if API doesn't report it
@@ -230,8 +280,13 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // If hardware state can't be read, avoid reporting active movement.
+    if (!deviceState && !cooldownInfo?.active) {
+      state = sessionInfo ? 'waiting' : 'disconnected';
+    }
+
     lastStatus = {
-      connected: true,
+      connected: !!deviceState,
       state,
       deviceState,
       session: sessionInfo,

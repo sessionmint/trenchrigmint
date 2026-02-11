@@ -23,14 +23,27 @@ let cachedClusterUrl: string | null = null;
 let cachedAt = 0;
 
 function normalizeClusterUrl(raw: string): string {
-  const value = raw.trim().replace(/\/+$/, '');
-  if (value.startsWith('http://') || value.startsWith('https://')) {
-    return value;
+  const value = raw.trim().replace(/^['"]|['"]$/g, '').replace(/\/+$/, '');
+  if (!value) return '';
+
+  const aliases: Record<string, string> = {
+    ca: 'ca-central-1',
+    use1: 'us-east-1',
+    use2: 'us-east-2',
+    usw1: 'us-west-1',
+    usw2: 'us-west-2',
+    aps2: 'ap-southeast-2',
+    euw2: 'eu-west-2',
+    euc1: 'eu-central-1',
+  };
+  const canonical = aliases[value] || value;
+  if (canonical.startsWith('http://') || canonical.startsWith('https://')) {
+    return canonical;
   }
-  if (value.includes('.')) {
-    return `https://${value}`;
+  if (canonical.includes('.')) {
+    return `https://${canonical}`;
   }
-  return `https://${value}.autoblowapi.com`;
+  return `https://${canonical}.autoblowapi.com`;
 }
 
 function uniqueUrls(urls: string[]): string[] {
@@ -38,6 +51,7 @@ function uniqueUrls(urls: string[]): string[] {
   const unique: string[] = [];
   for (const url of urls) {
     const normalized = normalizeClusterUrl(url);
+    if (!normalized) continue;
     if (!seen.has(normalized)) {
       seen.add(normalized);
       unique.push(normalized);
@@ -127,4 +141,3 @@ export async function resolveAutoblowClusterUrl(deviceToken: string, explicitClu
 
   throw new Error('Unable to resolve Autoblow cluster from configured and fallback regions');
 }
-

@@ -11,6 +11,7 @@ import {
   getSession,
   DeviceCommand
 } from '@/lib/chartSync';
+import { rebalanceChartSyncStores } from '@/lib/chartSync/store';
 import { getAdminDb, getDeviceSession, updateDeviceSession } from '@/lib/firebase-admin';
 import { DEFAULT_TOKEN_MINT } from '@/lib/constants';
 import { resolveAutoblowClusterUrl } from '@/lib/autoblow/cluster';
@@ -133,6 +134,9 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    // Always heal cross-store drift (Redis/KV <-> Firestore) on tick.
+    const storeSync = await rebalanceChartSyncStores();
+
     // Get all active sessions
     let sessions = await getAllActiveSessions();
 
@@ -146,7 +150,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({
         success: true,
         message: 'No active sessions',
-        sessionsProcessed: 0
+        sessionsProcessed: 0,
+        storeSync
       });
     }
 
@@ -220,6 +225,7 @@ export async function GET(request: NextRequest) {
       success: true,
       timestamp: new Date().toISOString(),
       deviceEnabled: AUTOBLOW_ENABLED,
+      storeSync,
       sessionsProcessed: results.length,
       sessionsCleaned: cleaned,
       results
