@@ -9,6 +9,7 @@ export const TREASURY_WALLET = process.env.NEXT_PUBLIC_TREASURY_WALLET || "4st6s
 // For MAINNET webhook monitoring - use a real mainnet token address
 // Example: BONK on mainnet: "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263"
 export const DEFAULT_TOKEN_MINT = process.env.NEXT_PUBLIC_DEFAULT_TOKEN || "2gWujYmBCd77Sf9gg6yMSexdPrudKpvss1yV8E71pump";
+export const DEFAULT_TOKEN_TICKER = process.env.NEXT_PUBLIC_DEFAULT_TOKEN_TICKER || "$MINSTR";
 
 // Your livestream embed URL
 // YouTube: https://www.youtube.com/embed/VIDEO_ID

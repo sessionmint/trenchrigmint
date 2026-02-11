@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { DEFAULT_TOKEN_TICKER } from '@/lib/constants';
 
 export function WelcomeModal() {
   const [isOpen, setIsOpen] = useState(true);
@@ -44,7 +45,7 @@ export function WelcomeModal() {
 
         <div className="modal-footer">
           TrenchRig Demo by <a href="https://sessionmint.fun" target="_blank" rel="noopener noreferrer">sessionmint.fun</a>
-          <p className="modal-disclaimer">$MINSTR is the only token associated with SessionMint.fun.</p>
+          <p className="modal-disclaimer">{DEFAULT_TOKEN_TICKER} is the only token associated with SessionMint.fun.</p>
           <p className="modal-notice">For entertainment and gag purposes only. Device synchronization is best-effort. We do not endorse any token displayed.</p>
           <div className="modal-links">
             <a href="mailto:sessionmint@gmail.com">Contact support</a>

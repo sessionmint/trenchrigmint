@@ -14,6 +14,7 @@ import {
   PRIORITY_PREMIUM,
   DISPLAY_DURATION_STANDARD,
   DEFAULT_TOKEN_MINT,
+  DEFAULT_TOKEN_TICKER,
   SOLANA_NETWORK_LABEL
 } from '@/lib/constants';
 import { withAppBasePath } from '@/lib/app-url';
@@ -678,10 +679,16 @@ function ActiveToken() {
           </>
         )}
         {isDefault && (
-          <div className="detail-row">
-            <span className="detail-label">Status</span>
-            <span className="detail-value text-muted">Default token (no queue)</span>
-          </div>
+          <>
+            <div className="detail-row">
+              <span className="detail-label">Ticker</span>
+              <span className="detail-value">{DEFAULT_TOKEN_TICKER}</span>
+            </div>
+            <div className="detail-row">
+              <span className="detail-label">Status</span>
+              <span className="detail-value text-muted">Default session state (no queue)</span>
+            </div>
+          </>
         )}
         <a
           href={`https://dexscreener.com/solana/${currentToken}`}
