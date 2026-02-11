@@ -566,9 +566,6 @@ export async function addToQueue(
       displayDuration,
       signature: transactionSignature,
       userId,
-      expiresAt: null,
-      addedAt: Date.now(),
-      position: 0,
     });
   }
 
