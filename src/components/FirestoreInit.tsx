@@ -4,6 +4,9 @@ import { useEffect, useRef, useState } from 'react';
 import { useQueueStore } from '@/store/useQueueStore';
 import { initializeAuth, subscribeToAuthState } from '@/lib/firebase';
 
+const QUEUE_DRIVER = (process.env.NEXT_PUBLIC_QUEUE_DRIVER || process.env.QUEUE_DRIVER || 'firestore').toLowerCase();
+const USE_FIRESTORE = QUEUE_DRIVER === 'firestore';
+
 export const FirestoreInit = () => {
   const initialize = useQueueStore((state) => state.initialize);
   const isInitialized = useQueueStore((state) => state.isInitialized);
@@ -13,6 +16,12 @@ export const FirestoreInit = () => {
 
   // Initialize anonymous auth when component mounts
   useEffect(() => {
+    if (!USE_FIRESTORE) {
+      // No Firestore: mark auth as ready so queue poller can start
+      setAuthInitialized(true);
+      return;
+    }
+
     let authUnsubscribe: (() => void) | undefined;
 
     console.log('[FirestoreInit] Component mounted, setting up auth...');

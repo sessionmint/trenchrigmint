@@ -1,45 +1,37 @@
 import { NextResponse } from 'next/server';
-import { getAdminDb } from '@/lib/firebase-admin';
-
-type CurrentTokenDoc = {
-  tokenMint?: string;
-  queueItemId?: string | null;
-  expiresAt?: { toMillis?: () => number } | null;
-  isPriority?: boolean;
-  priorityLevel?: number;
-  displayDuration?: number;
-  walletAddress?: string | null;
-};
+import { getCurrentToken, listQueue } from '@/lib/queue-driver';
 
 export async function GET() {
   try {
-    const db = getAdminDb();
-
-    const [currentSnap, queueSnap] = await Promise.all([
-      db.doc('settings/currentToken').get(),
-      db.collection('queue').orderBy('position', 'asc').limit(200).get(),
+    const [current, queueRaw] = await Promise.all([
+      getCurrentToken(),
+      listQueue(),
     ]);
 
-    const current = (currentSnap.exists ? (currentSnap.data() as CurrentTokenDoc) : null);
+    const queue = queueRaw.map((item) => {
+      const expiresAt = typeof item.expiresAt === 'object' && item.expiresAt !== null && 'toMillis' in item.expiresAt
+        ? (item.expiresAt as { toMillis: () => number }).toMillis()
+        : (item.expiresAt as number | undefined) || 0;
+      const addedAt = typeof item.addedAt === 'object' && item.addedAt !== null && 'toMillis' in item.addedAt
+        ? (item.addedAt as { toMillis: () => number }).toMillis()
+        : (item.addedAt as number | undefined) || 0;
 
-    const queue = queueSnap.docs.map((d) => {
-      const data = d.data() as Record<string, unknown>;
-      const expiresAt = (data.expiresAt as { toMillis?: () => number } | null | undefined)?.toMillis?.() ?? 0;
-      const addedAt = (data.addedAt as { toMillis?: () => number } | null | undefined)?.toMillis?.() ?? 0;
       return {
-        id: d.id,
-        tokenMint: String(data.tokenMint || ''),
-        walletAddress: String(data.walletAddress || ''),
+        id: item.id,
+        tokenMint: item.tokenMint,
+        walletAddress: item.walletAddress,
         expiresAt,
-        isPriority: !!data.isPriority,
-        priorityLevel: Number(data.priorityLevel || 0),
-        displayDuration: Number(data.displayDuration || 600000),
+        isPriority: item.isPriority,
+        priorityLevel: item.priorityLevel || 0,
+        displayDuration: item.displayDuration || 600000,
         addedAt,
-        position: Number(data.position || 0),
+        position: item.position || 0,
       };
     });
 
-    const currentExpiresAt = current?.expiresAt?.toMillis?.() ?? 0;
+    const currentExpiresAt = typeof current?.expiresAt === 'object' && current?.expiresAt !== null && 'toMillis' in current.expiresAt
+      ? (current.expiresAt as { toMillis: () => number }).toMillis()
+      : (current?.expiresAt as number | undefined) || 0;
 
     return NextResponse.json(
       {
@@ -64,4 +56,3 @@ export async function GET() {
     return NextResponse.json({ ok: false }, { status: 500 });
   }
 }
-

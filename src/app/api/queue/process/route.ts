@@ -1,7 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAdminDb, FieldValue, Timestamp } from '@/lib/firebase-admin';
+import { getAdminDb, FieldValue } from '@/lib/firebase-admin';
 import { DEFAULT_TOKEN_MINT, HELIUS_API_KEY, ADMIN_API_KEY, CRON_SECRET } from '@/lib/constants';
 import { getInternalBaseUrl, getPublicBaseUrl } from '@/lib/app-url';
+import {
+  getCurrentToken,
+  popNextQueueItem,
+  setCurrentToken,
+  resetToDefaultToken,
+  listQueue,
+  queueLength,
+} from '@/lib/queue-driver';
 
 // ============================================
 // AUTHENTICATION
@@ -34,30 +42,6 @@ function verifyAuth(request: NextRequest, requireAdmin: boolean = false): boolea
   }
 
   return false;
-}
-
-// ============================================
-// TYPES
-// ============================================
-
-interface QueueItem {
-  id: string;
-  tokenMint: string;
-  walletAddress: string;
-  isPriority: boolean;
-  priorityLevel: number;
-  displayDuration: number;
-  position: number;
-}
-
-interface CurrentToken {
-  tokenMint: string;
-  queueItemId: string | null;
-  expiresAt: Timestamp | null;
-  isPriority: boolean;
-  priorityLevel: number;
-  displayDuration: number;
-  walletAddress: string | null;
 }
 
 // ============================================
@@ -112,66 +96,6 @@ async function updateHeliusWebhook(tokenMint: string, internalBaseUrl: string, p
 }
 
 // ============================================
-// QUEUE PROCESSING
-// ============================================
-
-async function getCurrentToken(): Promise<CurrentToken | null> {
-  const db = getAdminDb();
-  const docSnap = await db.doc('settings/currentToken').get();
-
-  if (docSnap.exists) {
-    return docSnap.data() as CurrentToken;
-  }
-  return null;
-}
-
-async function getNextQueueItem(): Promise<QueueItem | null> {
-  const db = getAdminDb();
-  const snapshot = await db
-    .collection('queue')
-    .orderBy('position', 'asc')
-    .limit(1)
-    .get();
-
-  if (snapshot.empty) {
-    return null;
-  }
-
-  const doc = snapshot.docs[0];
-  return { id: doc.id, ...doc.data() } as QueueItem;
-}
-
-async function setCurrentToken(
-  tokenMint: string,
-  queueItemId: string | null,
-  expiresAt: Date | null,
-  isPriority: boolean,
-  priorityLevel: number,
-  displayDuration: number,
-  walletAddress: string | null
-): Promise<void> {
-  const db = getAdminDb();
-
-  await db.doc('settings/currentToken').set({
-    tokenMint,
-    queueItemId,
-    expiresAt: expiresAt ? Timestamp.fromDate(expiresAt) : null,
-    isPriority,
-    priorityLevel,
-    displayDuration,
-    walletAddress,
-    activeAt: Timestamp.fromDate(new Date()), // Track when token became active
-    sessionStarted: false, // Will be set to true when device session starts
-    updatedAt: FieldValue.serverTimestamp(),
-  });
-}
-
-async function removeFromQueue(id: string): Promise<void> {
-  const db = getAdminDb();
-  await db.collection('queue').doc(id).delete();
-}
-
-// ============================================
 // API HANDLER
 // ============================================
 
@@ -193,16 +117,20 @@ export async function POST(request: NextRequest) {
     const current = await getCurrentToken();
     const now = Date.now();
 
+    // Check if current token has expired
+    const currentExpiresMs = typeof current?.expiresAt === 'object' && current?.expiresAt !== null && 'toMillis' in current.expiresAt
+      ? (current.expiresAt as { toMillis: () => number }).toMillis()
+      : (current?.expiresAt as number | undefined);
+
     console.log('[Process] Current token state:', {
       tokenMint: current?.tokenMint,
       queueItemId: current?.queueItemId,
-      expiresAt: current?.expiresAt?.toMillis(),
+      expiresAt: currentExpiresMs,
       now
     });
 
-    // Check if current token has expired
-    const isExpired = current?.expiresAt
-      ? current.expiresAt.toMillis() < now
+    const isExpired = currentExpiresMs
+      ? currentExpiresMs < now
       : !current?.queueItemId; // No active item means we should process
 
     console.log('[Process] Is expired:', isExpired);
@@ -213,13 +141,13 @@ export async function POST(request: NextRequest) {
         processed: false,
         reason: 'Current token not expired',
         currentToken: current.tokenMint,
-        expiresAt: current.expiresAt?.toDate().toISOString(),
-        expiresIn: current.expiresAt ? current.expiresAt.toMillis() - now : null,
+        expiresAt: currentExpiresMs ? new Date(currentExpiresMs).toISOString() : null,
+        expiresIn: currentExpiresMs ? currentExpiresMs - now : null,
       });
     }
 
     // Get next item from queue
-    const nextItem = await getNextQueueItem();
+    const nextItem = await popNextQueueItem();
     console.log('[Process] Next queue item:', nextItem ? { id: nextItem.id, tokenMint: nextItem.tokenMint } : 'none');
 
     // Stop the current device session before transitioning
@@ -241,18 +169,15 @@ export async function POST(request: NextRequest) {
       // Set next item as current using its own display duration
       const expiresAt = new Date(now + nextItem.displayDuration);
 
-      await setCurrentToken(
-        nextItem.tokenMint,
-        nextItem.id,
+      await setCurrentToken({
+        tokenMint: nextItem.tokenMint,
+        queueItemId: nextItem.id,
         expiresAt,
-        nextItem.isPriority,
-        nextItem.priorityLevel,
-        nextItem.displayDuration,
-        nextItem.walletAddress
-      );
-
-      // Remove from queue
-      await removeFromQueue(nextItem.id);
+        isPriority: nextItem.isPriority,
+        priorityLevel: nextItem.priorityLevel,
+        displayDuration: nextItem.displayDuration,
+        walletAddress: nextItem.walletAddress,
+      });
 
       // Update webhook to track new token
       const webhookSynced = await updateHeliusWebhook(nextItem.tokenMint, internalBaseUrl, publicBaseUrl);
@@ -274,7 +199,7 @@ export async function POST(request: NextRequest) {
       });
     } else {
       // Queue empty - reset to default token
-      await setCurrentToken(DEFAULT_TOKEN_MINT, null, null, false, 0, 0, null);
+      await resetToDefaultToken(DEFAULT_TOKEN_MINT);
 
       // Update webhook to track default token
       const webhookSynced = await updateHeliusWebhook(DEFAULT_TOKEN_MINT, internalBaseUrl, publicBaseUrl);
@@ -311,32 +236,24 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
       }
 
-      const db = getAdminDb();
-
-      // Get current token
+      // Get current token + queue via configured driver
       const current = await getCurrentToken();
-
-      // Get queue length
-      const queueSnapshot = await db.collection('queue').get();
-      const queueLength = queueSnapshot.size;
-
-      // Get queue items
-      const queueItems = queueSnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
+      const queueItems = await listQueue();
+      const queueLengthValue = await queueLength();
 
       const now = Date.now();
-      const expiresAt = current?.expiresAt?.toMillis();
+      const expiresAtMs = typeof current?.expiresAt === 'object' && current?.expiresAt !== null && 'toMillis' in current.expiresAt
+        ? (current.expiresAt as { toMillis: () => number }).toMillis()
+        : (current?.expiresAt as number | undefined);
 
       return NextResponse.json({
         currentToken: current?.tokenMint || DEFAULT_TOKEN_MINT,
         queueItemId: current?.queueItemId || null,
         isPriority: current?.isPriority || false,
-        expiresAt: expiresAt ? new Date(expiresAt).toISOString() : null,
-        expiresIn: expiresAt ? Math.max(0, expiresAt - now) : null,
-        isExpired: expiresAt ? expiresAt < now : true,
-        queueLength,
+        expiresAt: expiresAtMs ? new Date(expiresAtMs).toISOString() : null,
+        expiresIn: expiresAtMs ? Math.max(0, expiresAtMs - now) : null,
+        isExpired: expiresAtMs ? expiresAtMs < now : true,
+        queueLength: queueLengthValue,
         queue: queueItems,
       });
     }

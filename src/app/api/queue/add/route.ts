@@ -1,12 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Connection, PublicKey, LAMPORTS_PER_SOL } from '@solana/web3.js';
 import {
-  addToQueueAdmin,
-  logTransactionAdmin,
-  isSignatureUsed,
-  getAdminDb,
-} from '@/lib/firebase-admin';
-import {
   TREASURY_WALLET,
   STANDARD_PRICE,
   PRIORITY_BASIC,
@@ -17,6 +11,12 @@ import {
   PRIORITY_LEVELS,
 } from '@/lib/constants';
 import { getInternalBaseUrl } from '@/lib/app-url';
+import {
+  addToQueue,
+  logTransaction,
+  isSignatureUsed,
+  getCurrentToken,
+} from '@/lib/queue-driver';
 
 // ============================================
 // TYPES
@@ -198,7 +198,7 @@ export async function POST(request: NextRequest) {
 
     if (!verification.verified) {
       // Log failed transaction for auditing
-      await logTransactionAdmin(
+      await logTransaction(
         tokenMint,
         walletAddress,
         verification.amount || 0,
@@ -245,7 +245,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Log the successful transaction
-    await logTransactionAdmin(
+    await logTransaction(
       tokenMint,
       walletAddress,
       paidAmount,
@@ -256,13 +256,11 @@ export async function POST(request: NextRequest) {
     );
 
     // Check if queue is currently empty (no active item) - we'll process immediately after adding
-    const db = getAdminDb();
-    const currentTokenDoc = await db.doc('settings/currentToken').get();
-    const currentToken = currentTokenDoc.data();
+    const currentToken = await getCurrentToken();
     const queueEmpty = !currentToken?.queueItemId;
 
     // Add to queue
-    const queueItemId = await addToQueueAdmin(
+    const queueItemId = await addToQueue(
       tokenMint,
       walletAddress,
       isPriority,

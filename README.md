@@ -32,7 +32,7 @@ Reference: `src/lib/constants.ts`
 
 - Next.js app router UI + APIs
 - Wallet connection and on-chain payment verification
-- Firebase/Firestore for queue + current Session State persistence
+- Queue persistence: Redis/Vercel KV (recommended) or Vercel Blob (lightweight), with Firestore fallback
 - Redis (optional, recommended) for chart-sync session persistence
 - Helius enhanced webhooks for trade data and metadata
 - Cron-driven queue progression and device tick processing
@@ -56,8 +56,11 @@ Required variables:
 - `NEXT_PUBLIC_HELIUS_API_KEY`
 - `HELIUS_API_KEY` (server-side)
 - `HELIUS_WEBHOOK_AUTH_TOKEN`
+- `QUEUE_DRIVER` (`redis`, `kv`, or `firestore`)
+- `KV_URL` / `REDIS_URL` (+ optional `REDIS_QUEUE_PREFIX`)
+- `BLOB_READ_WRITE_TOKEN` (if `QUEUE_DRIVER=blob`)
+- `BLOB_QUEUE_PREFIX` (optional, defaults `queue`)
 - `FIREBASE_*` and/or `FIREBASE_ADMIN_JSON`
-- `REDIS_URL` (recommended)
 - `ADMIN_API_KEY`
 - `CRON_SECRET`
 

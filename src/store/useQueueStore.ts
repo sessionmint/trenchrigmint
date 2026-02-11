@@ -11,6 +11,9 @@ import {
 import { withAppBasePath } from '@/lib/app-url';
 import { Timestamp } from 'firebase/firestore';
 
+const QUEUE_DRIVER = (process.env.NEXT_PUBLIC_QUEUE_DRIVER || process.env.QUEUE_DRIVER || 'firestore').toLowerCase();
+const USE_FIRESTORE = QUEUE_DRIVER === 'firestore';
+
 // ============================================
 // TYPES
 // ============================================
@@ -89,7 +92,21 @@ export const useQueueStore = create<QueueStore>((set, get) => ({
 
     console.log('[QueueStore] Initializing...');
 
-    // Immediately fetch current state (don't wait for listeners)
+    // If not using Firestore, skip listeners and poll the state API instead.
+    if (!USE_FIRESTORE) {
+      console.log('[QueueStore] Using', QUEUE_DRIVER, 'driver: polling /api/state instead of Firestore listeners');
+      const poll = setInterval(() => {
+        get().refreshState();
+      }, 5000);
+      // Initial fetch
+      get().refreshState();
+      set({ isInitialized: true });
+      return () => {
+        clearInterval(poll);
+      };
+    }
+
+    // Immediately fetch current state (don't wait for listeners) when Firestore driver is active
     get().refreshState();
 
     // Subscribe to queue changes (read-only)
@@ -317,8 +334,7 @@ export const useQueueStore = create<QueueStore>((set, get) => ({
   refreshState: async () => {
     console.log('[QueueStore] Refreshing state from Firestore...');
     try {
-      // Prefer server-side state when client Firestore permissions are locked down.
-      // This keeps the demo functional even if Firestore rules are restrictive.
+      // Prefer server-side state (works for both redis/kv and firestore drivers)
       try {
         const res = await fetch(withAppBasePath('/api/state'), { method: 'GET' });
         if (res.ok) {
@@ -372,7 +388,12 @@ export const useQueueStore = create<QueueStore>((set, get) => ({
           return;
         }
       } catch (e) {
-        console.warn('[QueueStore] /api/state failed, falling back to client Firestore:', e);
+        console.warn('[QueueStore] /api/state failed', e);
+        if (!USE_FIRESTORE) {
+          // In redis/kv mode we don't have Firestore fallback, so bail early.
+          return;
+        }
+        console.warn('[QueueStore] Falling back to client Firestore listeners');
       }
 
       const [queueItems, currentToken] = await Promise.all([

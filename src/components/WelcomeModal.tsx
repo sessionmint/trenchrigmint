@@ -44,7 +44,7 @@ export function WelcomeModal() {
 
         <div className="modal-footer">
           TrenchRig Demo by <a href="https://sessionmint.fun" target="_blank" rel="noopener noreferrer">sessionmint.fun</a>
-          <p className="modal-disclaimer">$MINSTR is the only token associated with SessionMint.fun.</p>
+          <p className="modal-disclaimer">No official token is endorsed. Do your own research before buying anything.</p>
           <p className="modal-notice">For entertainment and gag purposes only. Device synchronization is best-effort. We do not endorse any token displayed.</p>
           <div className="modal-links">
             <a href="mailto:sessionmint@gmail.com">Contact support</a>
