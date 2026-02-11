@@ -276,7 +276,6 @@ async function blobWriteJSON(pathname: string, data: unknown): Promise<void> {
     addRandomSuffix: false,
     contentType: 'application/json',
     token: BLOB_TOKEN,
-    allowOverwrite: true,
   });
 }
 
