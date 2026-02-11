@@ -16,41 +16,45 @@ export function WelcomeModal() {
   return (
     <div className="modal-overlay">
       <div className="modal-container">
-        <h2 className="modal-title">How it works?</h2>
+        <h2 className="modal-title">Session State</h2>
 
         <p className="modal-description">
-          SessionMint allows <span className="text-highlight">anyone</span> to take control of the AutoBlow device being live-streamed. The device moves as per the chart loaded on SessionMint.
+          SessionMint operates TrenchRig on a deterministic <span className="text-highlight">Session State</span>. When a state is purchased, it becomes the enforced live focus. The selected token chart becomes the control signal. TrenchRig executes that signal in real time.
         </p>
 
         <div className="modal-steps">
           <p className="modal-step">
-            <span className="step-label">Step 1:</span> Connect Wallet
+            <span className="step-label">Step 1 &mdash;</span> Connect Wallet<br />
+            Authorize your wallet to participate.
           </p>
           <p className="modal-step">
-            <span className="step-label">Step 2:</span> Pick the option & approve
+            <span className="step-label">Step 2 &mdash;</span> Enter Token Contract<br />
+            Paste the token contract address and purchase the Session State.
           </p>
           <p className="modal-step">
-            <span className="step-label">Step 3:</span> Stroke Your Coin in the Trenches
+            <span className="step-label">Step 3 &mdash;</span> Take the Screen<br />
+            Your token is featured live.<br />
+            TrenchRig syncs to the chart in real time.
           </p>
         </div>
 
         <p className="modal-tagline">
-          A COMMUNITY THAT PUMPS TOGETHER, STROKES TOGETHER.<br />
-          SHOW YOUR PUMP TO THE STREAM!
+          THE SELECTED TOKEN CHART BECOMES THE CONTROL SIGNAL.<br />
+          TRENCHRIG EXECUTES THAT SIGNAL IN REAL TIME.
         </p>
 
         <button className="modal-button" onClick={handleClose}>
-          I&apos;m ready to stroke
+          I&apos;M READY TO FEEL THE PUMP
         </button>
 
         <div className="modal-footer">
-          Demo by <a href="https://sessionmint.fun" target="_blank" rel="noopener noreferrer">sessionmint.fun</a>
-          <p className="modal-disclaimer">There is no token associated with SessionMint.</p>
-          <p className="modal-notice">Meant for gag & entertainment purposes only. We do not endorse any token displayed on SessionMint. Device Synchronization is at best-effort basis.</p>
+          TrenchRig Demo by <a href="https://sessionmint.fun" target="_blank" rel="noopener noreferrer">sessionmint.fun</a>
+          <p className="modal-disclaimer">$MINSTR is the only token associated with SessionMint.fun.</p>
+          <p className="modal-notice">For entertainment and gag purposes only. Device synchronization is best-effort. We do not endorse any token displayed.</p>
           <div className="modal-links">
             <a href="https://sessionmint.fun/terms-of-service/" target="_blank" rel="noopener noreferrer">Terms of Service</a>
             <span className="modal-divider">|</span>
-            <a href="mailto:support@sessionmint.fun">Contact Support</a>
+            <a href="mailto:sessionmint@gmail.com">Contact support (sessionmint@gmail.com)</a>
           </div>
         </div>
       </div>
