@@ -51,7 +51,7 @@ Required variables:
 - `NEXT_PUBLIC_SOLANA_CLUSTER=mainnet-beta`
 - `NEXT_PUBLIC_TREASURY_WALLET`
 - `NEXT_PUBLIC_DEFAULT_TOKEN`
-- `NEXT_PUBLIC_DEFAULT_TOKEN_TICKER` (optional, defaults to `$MINSTR`)
+- `NEXT_PUBLIC_DEFAULT_TOKEN_TICKER` (optional, defaults to `$PUMP`)
 - `NEXT_PUBLIC_HELIUS_RPC_URL=https://mainnet.helius-rpc.com`
 - `NEXT_PUBLIC_HELIUS_WS_URL=wss://mainnet.helius-rpc.com`
 - `NEXT_PUBLIC_HELIUS_API_KEY`
