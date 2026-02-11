@@ -44,7 +44,7 @@ export interface QueueItemRecord {
   isPriority: boolean;
   priorityLevel: number;
   displayDuration: number;
-  addedAt: Timestamp | number | null;
+  addedAt: Timestamp | number | null | FieldValue;
   position: number;
   signature: string;
   userId: string | null;
