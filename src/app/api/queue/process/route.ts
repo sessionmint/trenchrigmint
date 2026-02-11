@@ -167,7 +167,7 @@ export async function POST(request: NextRequest) {
 
     if (nextItem) {
       // Set next item as current using its own display duration
-      const expiresAt = new Date(now + nextItem.displayDuration);
+      const expiresAt = now + nextItem.displayDuration;
 
       await setCurrentToken({
         tokenMint: nextItem.tokenMint,
@@ -191,7 +191,7 @@ export async function POST(request: NextRequest) {
         queueItemId: nextItem.id,
         tokenMint: nextItem.tokenMint,
         walletAddress: nextItem.walletAddress,
-        expiresAt: expiresAt.toISOString(),
+        expiresAt: new Date(expiresAt).toISOString(),
         isPriority: nextItem.isPriority,
         priorityLevel: nextItem.priorityLevel,
         displayDuration: nextItem.displayDuration,
