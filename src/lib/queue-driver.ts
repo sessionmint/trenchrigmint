@@ -170,9 +170,10 @@ async function redisPopNext(): Promise<QueueItemRecord | null> {
   const client = await getRedis();
   if (!client) return null;
 
-  const popped = await client.zPopMin(QUEUE_KEY, 1);
+  const popped = await client.sendCommand<[string, string] | null>(['ZPOPMIN', QUEUE_KEY, '1']);
   if (!popped || popped.length === 0) return null;
-  const parsed = parseQueueItem(popped[0].value, 0);
+  const value = popped[0];
+  const parsed = parseQueueItem(value, 0);
   return parsed || null;
 }
 
