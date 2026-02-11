@@ -20,8 +20,13 @@ import { resolveAutoblowClusterUrl } from '@/lib/autoblow/cluster';
 // CONFIGURATION
 // ============================================
 
+const isAutoblowEnabled = (value?: string | null) => {
+  const normalized = (value || '').toLowerCase().trim();
+  return normalized === 'true' || normalized === '1' || normalized === 'yes' || normalized === 'on';
+};
+
 const AUTOBLOW_DEVICE_TOKEN = process.env.AUTOBLOW_DEVICE_TOKEN || '';
-const AUTOBLOW_ENABLED = process.env.AUTOBLOW_ENABLED === 'true';
+const AUTOBLOW_ENABLED = isAutoblowEnabled(process.env.AUTOBLOW_ENABLED);
 const AUTOBLOW_CLUSTER = process.env.AUTOBLOW_CLUSTER || '';
 
 // Track last command time to enforce cooldown

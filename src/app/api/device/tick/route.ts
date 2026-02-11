@@ -16,9 +16,14 @@ import { getAdminDb, getDeviceSession, updateDeviceSession } from '@/lib/firebas
 import { DEFAULT_TOKEN_MINT } from '@/lib/constants';
 import { resolveAutoblowClusterUrl } from '@/lib/autoblow/cluster';
 
+const isAutoblowEnabled = (value?: string | null) => {
+  const normalized = (value || '').toLowerCase().trim();
+  return normalized === 'true' || normalized === '1' || normalized === 'yes' || normalized === 'on';
+};
+
 // Environment variables
 const AUTOBLOW_DEVICE_TOKEN = process.env.AUTOBLOW_DEVICE_TOKEN || '';
-const AUTOBLOW_ENABLED = process.env.AUTOBLOW_ENABLED === 'true';
+const AUTOBLOW_ENABLED = isAutoblowEnabled(process.env.AUTOBLOW_ENABLED);
 const AUTOBLOW_CLUSTER = process.env.AUTOBLOW_CLUSTER || '';
 
 interface CurrentTokenDoc {

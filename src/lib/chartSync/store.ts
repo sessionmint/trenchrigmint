@@ -2,37 +2,40 @@ import { createClient, type RedisClientType } from 'redis';
 import { getAdminDb, FieldValue } from '@/lib/firebase-admin';
 import type { ChartSyncSession } from './types';
 
-const REDIS_URL = process.env.REDIS_URL || '';
-function autoRedisPrefix(): string {
-  const explicit = (process.env.REDIS_PREFIX || '').trim();
-  if (explicit) return explicit;
+function resolveRedisUrl(): string {
+  // Prefer explicit URLs
+  const direct =
+    (process.env.REDIS_URL ||
+      process.env.KV_URL ||
+      process.env.UPSTASH_REDIS_URL ||
+      '').trim();
+  if (direct) return direct;
 
-  const vercelProject =
-    (process.env.VERCEL_PROJECT_ID || process.env.VERCEL_PROJECT_PRODUCTION_URL || '').trim();
-  const firebaseProject =
-    (process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || process.env.FIREBASE_PROJECT_ID || '').trim();
-  const appUrl = (process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL || '').trim();
-  const envName = (process.env.VERCEL_ENV || process.env.NODE_ENV || 'development').trim();
-
-  const rawProject = vercelProject || firebaseProject || appUrl || 'sessionmint';
-  const project = rawProject
-    .toLowerCase()
-    .replace(/^https?:\/\//, '')
-    .replace(/\/.*/, '')
-    .replace(/[^a-z0-9-]/g, '-')
-    .replace(/-+/g, '-')
-    .replace(/^-+|-+$/g, '') || 'sessionmint';
-
-  const env = envName
-    .toLowerCase()
-    .replace(/[^a-z0-9-]/g, '-')
-    .replace(/-+/g, '-')
-    .replace(/^-+|-+$/g, '') || 'development';
-
-  return `${project}:${env}:chartsync`;
+  // Build from Upstash REST credentials if provided
+  const restUrl = (process.env.UPSTASH_REDIS_REST_URL || '').trim();
+  const restToken = (process.env.UPSTASH_REDIS_REST_TOKEN || '').trim();
+  if (restUrl && restToken) {
+    try {
+      const hostname = new URL(restUrl).hostname;
+      return `rediss://default:${restToken}@${hostname}`;
+    } catch {
+      // Fall through
+    }
+  }
+  return '';
 }
 
-const REDIS_PREFIX = autoRedisPrefix();
+function resolveRedisPrefix(): string {
+  const explicit = (process.env.REDIS_PREFIX || '').trim().replace(/:+$/, '');
+  if (explicit) return explicit;
+
+  const base = 'sessionmint:chartsync';
+  const scope = (process.env.VERCEL_ENV || process.env.NODE_ENV || '').trim();
+  return scope ? `${base}:${scope}` : base;
+}
+
+const REDIS_URL = resolveRedisUrl();
+const REDIS_PREFIX = resolveRedisPrefix();
 const REDIS_INDEX_KEY = `${REDIS_PREFIX}:session_ids`;
 const REDIS_SESSION_KEY = (sessionId: string) => `${REDIS_PREFIX}:session:${sessionId}`;
 const FIRESTORE_COLLECTION = 'chartSyncSessions';

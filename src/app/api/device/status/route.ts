@@ -14,9 +14,14 @@ const SESSION_COOLDOWN_MS = 10000; // 10 seconds before starting device session
 const FIREBASE_SESSION_STALE_MS = 90000; // 90 seconds without updates is considered stale
 const TICK_KICK_MIN_INTERVAL_MS = 30000; // Avoid hammering tick endpoint
 
+const isAutoblowEnabled = (value?: string | null) => {
+  const normalized = (value || '').toLowerCase().trim();
+  return normalized === 'true' || normalized === '1' || normalized === 'yes' || normalized === 'on';
+};
+
 // Environment variables for device configuration
 const AUTOBLOW_DEVICE_TOKEN = process.env.AUTOBLOW_DEVICE_TOKEN || '';
-const AUTOBLOW_ENABLED = process.env.AUTOBLOW_ENABLED === 'true';
+const AUTOBLOW_ENABLED = isAutoblowEnabled(process.env.AUTOBLOW_ENABLED);
 const AUTOBLOW_CLUSTER = process.env.AUTOBLOW_CLUSTER || '';
 
 // Cache connection status

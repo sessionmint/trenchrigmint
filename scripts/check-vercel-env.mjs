@@ -24,7 +24,8 @@ function loadEnvFile(filePath) {
 loadEnvFile(path.resolve(process.cwd(), '.env.local'));
 
 function isTrue(value) {
-  return String(value || '').toLowerCase() === 'true';
+  const normalized = String(value || '').toLowerCase().trim();
+  return normalized === 'true' || normalized === '1' || normalized === 'yes' || normalized === 'on';
 }
 
 const required = [
@@ -67,8 +68,14 @@ if (autoblowEnabled) {
   warnings.push('AUTOBLOW_ENABLED is not "true". Device control will be disabled.');
 }
 
-if (!(process.env.REDIS_URL || '').trim()) {
-  warnings.push('REDIS_URL not set. Chart-sync sessions will use Firestore fallback (recommended to add Redis for reliability).');
+const hasRedis =
+  (process.env.REDIS_URL || '').trim() ||
+  (process.env.KV_URL || '').trim() ||
+  (process.env.UPSTASH_REDIS_URL || '').trim() ||
+  (process.env.UPSTASH_REDIS_REST_URL || '').trim();
+
+if (!hasRedis) {
+  warnings.push('REDIS_URL not set (KV_URL/UPSTASH_REDIS_* also missing). Chart-sync sessions will use Firestore fallback; add Redis for reliability.');
 }
 
 if (!(process.env.CRON_SECRET || '').trim()) {
