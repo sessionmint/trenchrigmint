@@ -16,23 +16,21 @@ export function WelcomeModal() {
   return (
     <div className="modal-overlay">
       <div className="modal-container">
-        <h2 className="modal-title">Session State</h2>
+        <h2 className="modal-title">Session Mint</h2>
 
         <p className="modal-description">
-          SessionMint operates TrenchRig on a deterministic <span className="text-highlight">Session State</span>. When a state is purchased, it becomes the enforced live focus. The selected token chart becomes the control signal. TrenchRig executes that signal in real time.
+          SessionMint's TrenchRig Syncs to the <span className="text-highlight">Session State Chart</span>. When a state is purchased, it becomes the enforced live focus.
         </p>
 
         <div className="modal-steps">
           <p className="modal-step">
-            <span className="step-label">Step 1 &mdash;</span> Connect Wallet<br />
-            Authorize your wallet to participate.
+            <span className="step-label">Step 1: </span> Connect Wallet<br />
           </p>
           <p className="modal-step">
-            <span className="step-label">Step 2 &mdash;</span> Enter Token Contract<br />
-            Paste the token contract address and purchase the Session State.
-          </p>
+            <span className="step-label">Step 2: Enter Token Contract Address & Pay<br />
+            </p>
           <p className="modal-step">
-            <span className="step-label">Step 3 &mdash;</span> Take the Screen<br />
+            <span className="step-label">Step 3: Take the Screen<br />
             Your token is featured live.<br />
             TrenchRig syncs to the chart in real time.
           </p>
@@ -52,9 +50,7 @@ export function WelcomeModal() {
           <p className="modal-disclaimer">$MINSTR is the only token associated with SessionMint.fun.</p>
           <p className="modal-notice">For entertainment and gag purposes only. Device synchronization is best-effort. We do not endorse any token displayed.</p>
           <div className="modal-links">
-            <a href="https://sessionmint.fun/terms-of-service/" target="_blank" rel="noopener noreferrer">Terms of Service</a>
-            <span className="modal-divider">|</span>
-            <a href="mailto:sessionmint@gmail.com">Contact support (sessionmint@gmail.com)</a>
+            <a href="mailto:sessionmint@gmail.com">Contact support</a>
           </div>
         </div>
       </div>
