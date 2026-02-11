@@ -19,26 +19,23 @@ export function WelcomeModal() {
         <h2 className="modal-title">Session Mint</h2>
 
         <p className="modal-description">
-          SessionMint's TrenchRig Syncs to the <span className="text-highlight">Session State Chart</span>. When a state is purchased, it becomes the enforced live focus.
+          SessionMint TrenchRig syncs to the <span className="text-highlight">Session State Chart</span>. When a state is purchased, it becomes the live focus.
         </p>
 
         <div className="modal-steps">
           <p className="modal-step">
-            <span className="step-label">Step 1: </span> Connect Wallet<br />
+            <span className="step-label">Step 1:</span> Connect Wallet
           </p>
           <p className="modal-step">
-            <span className="step-label">Step 2: Enter Token Contract Address & Pay<br />
-            </p>
+            <span className="step-label">Step 2:</span> Enter Token Contract Address and Pay
+          </p>
           <p className="modal-step">
-            <span className="step-label">Step 3: Take the Screen<br />
-            Your token is featured live.<br />
-            TrenchRig syncs to the chart in real time.
+            <span className="step-label">Step 3:</span> Take the Screen
           </p>
         </div>
 
         <p className="modal-tagline">
-          THE SELECTED TOKEN CHART BECOMES THE CONTROL SIGNAL.<br />
-          TRENCHRIG EXECUTES THAT SIGNAL IN REAL TIME.
+          Your token is featured live.
         </p>
 
         <button className="modal-button" onClick={handleClose}>
